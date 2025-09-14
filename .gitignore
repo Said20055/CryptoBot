@@ -1,0 +1,51 @@
+# Файлы Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.env/
+.venv/
+env/
+
+# Файлы настроек и секретов
+.env
+.config.txt
+*.env
+secrets.py
+credentials.json
+*.key
+*.pem
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.bak
+
+# IDE и редакторы
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Дистрибутивы и сборки
+/dist/
+/build/
+*.egg-info/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Базы данных
+*.sqlite
+*.sqlite3
+
+# Кэш и прочее
+.cache/
+.pytest_cache/
+
+*.db
+
+myenv
