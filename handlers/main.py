@@ -5,8 +5,9 @@
 from aiogram.types import Message, CallbackQuery
 from config import ADMIN_CHAT_ID
 from utils.logging_config import logger
-from utils.database import save_or_update_user
-from utils.texts import WELCOME_TEXT, HELP_TEXT, get_main_keyboard
+from utils.database import get_user_profile, save_or_update_user
+from utils.texts import WELCOME_TEXT, HELP_TEXT, get_main_keyboard, get_back_to_main_keyboard
+from typing import Union
 
 async def start_handler(event: Message | CallbackQuery):
     """Обработчик команды /start"""
@@ -93,3 +94,43 @@ async def image_handler(message: Message):
                 logger.info(f"Photo sent to admin {admin_id}")
             except Exception as e:
                 logger.error(f"Failed to send photo to admin {admin_id}: {e}")
+async def profile_handler(event: Union[Message, CallbackQuery]):
+    """
+    Универсальный обработчик для команды /profile и кнопки "Профиль".
+    Показывает статистику пользователя.
+    """
+    keyboard = get_back_to_main_keyboard()
+    # Получаем user_id. Эта строка работает и для Message, и для CallbackQuery.
+    user_id = event.from_user.id
+    
+    # Вызываем функцию для получения данных профиля из БД
+    profile_data = await get_user_profile(user_id)
+    
+    if profile_data:
+        # Если данные получены, форматируем красивый ответ
+        username = profile_data['username'] or "не указан"
+
+        text = (
+            f"<b>👤 Ваш профиль</b>\n\n"
+            f"<b>ID:</b> <code>{profile_data['user_id']}</code>\n"
+            f"<b>Никнейм:</b> @{username}\n\n"
+            f"<b>📊 Статистика:</b>\n"
+            f"  - <b>Всего обменов:</b> {profile_data['total_orders']}\n"
+            f"  - <b>Общий объем:</b> {profile_data['total_volume_rub']:.2f} RUB"
+        )
+    else:
+        # Если профиль не найден
+        text = "Не удалось найти ваш профиль. Возможно, вы еще не совершали обменов."
+
+    # Проверяем, как был вызван хендлер (командой или кнопкой)
+    if isinstance(event, Message):
+        # Если это команда, просто отправляем ответ
+        await event.answer(text, reply_markup=keyboard ,parse_mode="HTML")
+    elif isinstance(event, CallbackQuery):
+        # Если это кнопка, отправляем ответ в чат
+        await event.message.answer(text, reply_markup=keyboard ,parse_mode="HTML")
+        # И удаляем предыдущее сообщение с кнопками для чистоты
+        try:
+            await event.message.delete()
+        except Exception as e:
+            logger.warning(f"Could not delete message: {e}")

@@ -2,7 +2,7 @@ import aiohttp
 import asyncio
 import time
 import ssl
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from utils.logging_config import logger
 
 class CryptoRates:
@@ -39,44 +39,48 @@ class CryptoRates:
             'timestamp': time.time()
         }
     
-    async def _make_api_request(self, url: str, crypto: str, max_retries: int = 3) -> Optional[float]:
-        """Делает запрос к API с повторными попытками"""
-        # Создаем SSL контекст без проверки сертификатов
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        
-        try:
-            for attempt in range(max_retries):
-                try:
-                    async with aiohttp.ClientSession(connector=connector) as session:
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                return data
-                            elif response.status == 429:
-                                # Rate limit - ждем и повторяем
-                                wait_time = (2 ** attempt) * 2  # Экспоненциальная задержка
-                                logger.warning(f"Rate limit for {crypto}, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
-                                await asyncio.sleep(wait_time)
-                                continue
-                            else:
-                                logger.error(f"API error for {crypto}: {response.status}")
-                                if attempt == max_retries - 1:
-                                    return None
-                                await asyncio.sleep(2)
-                                continue
-                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                    logger.error(f"Network error for {crypto} (attempt {attempt + 1}): {e}")
-                    if attempt == max_retries - 1:
-                        return None
-                    await asyncio.sleep(2)
-                    continue
-        finally:
-            await connector.close()
-        
+    async def _make_api_request(self, url: str, crypto: str, max_retries: int = 3) -> Optional[Any]:
+    
+    # Устанавливаем таймаут прямо в конструкторе сессии
+        timeout = aiohttp.ClientTimeout(total=10)
+
+        for attempt in range(max_retries):
+            try:
+            # Контекстный менеджер 'async with' сам управляет созданием и безопасным
+            # закрытием сессии. Дополнительные коннекторы и ssl-контексты не нужны.
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            return data
+
+                        elif response.status == 429:
+                        # Rate limit - ждем и повторяем
+                            wait_time = (2 ** attempt) * 2  # Экспоненциальная задержка
+                            logger.warning(
+                            f"Rate limit for {crypto}, waiting {wait_time}s before retry {attempt + 1}/{max_retries}"
+                            )
+                            await asyncio.sleep(wait_time)
+                            continue
+
+                        else:
+                        # Логируем не только статус, но и тело ответа для лучшей диагностики
+                            error_body = await response.text()
+                            logger.error(
+                            f"API error for {crypto}: Status {response.status}, Body: {error_body}"
+                            )
+                            if attempt == max_retries - 1:
+                                return None
+                            await asyncio.sleep(2)
+                            continue
+
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                logger.error(f"Network error for {crypto} (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    return None
+                await asyncio.sleep(2)
+                continue
+    
         return None
     
     async def get_btc_rate(self) -> Optional[float]:

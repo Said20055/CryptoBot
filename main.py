@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import BotCommandScopeChat, BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import AiogramError
 from config import TOKEN, ADMIN_CHAT_ID
 from handlers import main as main_handlers, crypto, admin
 from utils.states import TransactionStates
@@ -30,6 +31,7 @@ async def main():
     # Регистрация команд для меню бота
     default_commands = [
         BotCommand(command="/start", description="Запустить бота"),
+        BotCommand(command="/profile", description="Показать мой профиль"),
         BotCommand(command="/help", description="Получить справку"),
         BotCommand(command="/id", description="Получить ваш Telegram ID")
     ]
@@ -43,13 +45,20 @@ async def main():
     for admin_id in ADMIN_CHAT_ID:
         try:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
-        except (ConnectionError, TimeoutError) as e:
-            logger.error(f"Failed to set admin commands for {admin_id}: {e}")
+            logger.info(f"Admin commands successfully set for admin_id: {admin_id}")
+        except AiogramError as e:
+        # Ловим конкретную ошибку от API Telegram
+            logger.error(f"Failed to set admin commands for admin_id: {admin_id}. Error: {e}")
+            logger.warning(f"Possible reason: Admin {admin_id} has not started the bot yet.")
+        except Exception as e:
+        # Ловим другие возможные ошибки, например, сетевые
+            logger.error(f"An unexpected error occurred while setting commands for {admin_id}: {e}")
     
     # Регистрация хэндлеров
     dp.message.register(main_handlers.start_handler, Command(commands=['start']))
     dp.message.register(main_handlers.help_handler, Command(commands=['help']))
     dp.message.register(main_handlers.id_handler, Command(commands=['id']))
+    dp.message.register(main_handlers.profile_handler, Command(commands=['profile']))
     dp.message.register(admin.users_handler, Command(commands=['users']))
     dp.message.register(admin.log_handler, Command(commands=["log"]))
     dp.message.register(admin.send_handler, Command(commands=["send"]))
@@ -74,6 +83,7 @@ async def main():
 
     # Callback handlers
     dp.callback_query.register(main_handlers.start_handler, F.data == 'main_menu')
+    dp.callback_query.register(main_handlers.profile_handler, F.data == 'profile')
     
     # Crypto exchange callbacks
     dp.callback_query.register(crypto.sell_handler, F.data == 'sell')

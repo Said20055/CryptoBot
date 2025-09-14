@@ -8,6 +8,7 @@
 from utils.crypto_rates import crypto_rates
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import AiogramError
 from utils.logging_config import logger
 from utils.states import TransactionStates
 import utils.texts as texts
@@ -496,7 +497,7 @@ async def payment_operator_handler(callback_query: CallbackQuery, state: FSMCont
                     parse_mode="Markdown"
                 )
                 logger.info(f"Operator request sent to admin {admin_id}")
-            except (ConnectionError, TimeoutError) as e:
+            except (ConnectionError, TimeoutError, AiogramError) as e:
                 logger.error(f"Failed to send operator request to admin {admin_id}: {e}")
         
         await callback_query.message.reply(text, parse_mode="Markdown")
@@ -572,7 +573,7 @@ async def phone_input_handler(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             logger.info(f"Order notification sent to admin {admin_id}")
-        except (ConnectionError, TimeoutError) as e:
+        except (ConnectionError, TimeoutError, AiogramError) as e:
             logger.error(f"Failed to notify admin {admin_id} about order {order_number}: {e}")
     
     await state.clear()
@@ -666,8 +667,10 @@ async def tx_link_input_handler(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             logger.info(f"Transaction link sent to admin {admin_id}")
-        except (ConnectionError, TimeoutError) as e:
+        except AiogramError as e:  # <-- ИЗМЕНЕНИЕ ЗДЕСЬ
+            # Ловим любую ошибку API Aiogram, включая 'chat not found'
             logger.error(f"Failed to send transaction link to admin {admin_id}: {e}")
+            logger.warning(f"Possible reason: Admin {admin_id} has not started the bot yet.")
     
     await state.clear()
 
@@ -724,7 +727,7 @@ async def operator_reply_input_handler(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             logger.info(f"User reply sent to admin {admin_id}")
-        except (ConnectionError, TimeoutError) as e:
+        except (ConnectionError, TimeoutError, AiogramError) as e:
             logger.error(f"Failed to send user reply to admin {admin_id}: {e}")
     
     await state.clear()

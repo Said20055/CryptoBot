@@ -23,19 +23,30 @@ def format_user_display_name(username: str) -> str:
 WELCOME_PHOTO_URL = "https://postimg.cc/LhjTfzJd"
 
 WELCOME_TEXT = (
-    "Добро пожаловать в крипто-обменник! 🚀\n\n"
-    "Выберите действие ниже, чтобы начать обмен с оператором."
+    "👋 *Добро пожаловать в ExpressObmen P2P!*\n\n"
+    "💸 *Обмен криптовалюты без лишних комиссий и задержек!*\n"
+    "⚡️ *Самые низкие комиссии на рынке* — мы заботимся о вашем бюджете!\n"
+    "🔒 *Безопасные транзакции* и гарантия надежности.\n"
+    "🚀 *Моментальные обмены 24/7* в пару кликов.\n"
+    "📱 *Удобный интерфейс прямо в Telegram* — просто выберите валюту и сумму!\n\n"
+    "*Начните обмен прямо сейчас* и ощутите скорость и выгоду с *ExpressObmen P2P!*\n\n"
 )
+
+
+
 
 # Основное меню с кнопками
 MAIN_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [
             InlineKeyboardButton(text="🛒 Купить крипту", callback_data="buy"),
+            InlineKeyboardButton(text="💸 Продать крипту", callback_data="sell"),
         ],
         [
-            InlineKeyboardButton(text="💸 Продать крипту", callback_data="sell"),
             InlineKeyboardButton(text="👨‍💼 Оператор", url="https://t.me/jenya2hh"),
+            InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+        ],
+        [
             InlineKeyboardButton(text="⭐ Отзывы", url="https://t.me/Blockchain_Exchange_Btc"),
         ],
     ]
@@ -44,6 +55,18 @@ MAIN_KEYBOARD = InlineKeyboardMarkup(
 def get_main_keyboard() -> InlineKeyboardMarkup:
     """Совместимость со старыми импортами: вернуть основную клавиатуру."""
     return MAIN_KEYBOARD
+
+
+BACK_TO_MAIN_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="main_menu")]
+    ]
+)
+
+def get_back_to_main_keyboard() -> InlineKeyboardMarkup:
+    """Универсальная клавиатура для возврата в главное меню."""
+    return BACK_TO_MAIN_KEYBOARD
+
 
 # =====================
 # Тексты и клавиатуры для обменов
@@ -76,6 +99,7 @@ def get_crypto_selection_keyboard(action: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🔷 TRX", callback_data=_crypto_callback(action, "TRX")),
             InlineKeyboardButton(text="💵 USDT", callback_data=_crypto_callback(action, "USDT")),
         ],
+        [   InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="main_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

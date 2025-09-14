@@ -5,3 +5,6 @@ aiohttp==3.10.5
 loguru
 apscheduler
 pytz
+python-dotenv
+pandas
+openpyxl

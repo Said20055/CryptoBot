@@ -5,7 +5,9 @@
 сохранения и получения данных пользователей и заявок.
 """
 
+from ast import Dict
 from datetime import datetime
+from typing import Dict, Any, Optional 
 import aiosqlite
 from utils.logging_config import logger
 
@@ -258,3 +260,59 @@ async def find_all_users():
         return []
     finally:
         await conn.close()
+async def get_user_profile(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Получает полную информацию профиля пользователя, включая статистику обменов.
+
+    Args:
+        user_id: ID пользователя в Telegram.
+
+    Returns:
+        Словарь с данными профиля или None, если пользователь не найден.
+    """
+    conn = None
+    try:
+        conn = await init_sqlite()
+        async with conn.cursor() as cursor:
+            # 1. Получаем основную информацию о пользователе из таблицы users
+            await cursor.execute("SELECT username FROM users WHERE user_id = ?", (user_id,))
+            user_data = await cursor.fetchone()
+
+            # Если пользователя нет в базе, возвращаем None
+            if not user_data:
+                logger.warning(f"Attempted to get profile for non-existent user {user_id}")
+                return None
+
+            username = user_data[0]
+
+            # 2. Получаем статистику из таблицы orders
+            # Используем агрегатные функции COUNT и SUM.
+            # COALESCE гарантирует, что если обменов нет, мы получим 0 вместо None.
+            await cursor.execute(
+                """
+                SELECT COUNT(order_id), COALESCE(SUM(amount_rub), 0)
+                FROM orders
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
+            stats_data = await cursor.fetchone()
+            
+            total_orders, total_volume_rub = stats_data
+
+            # 3. Собираем все в один словарь
+            profile = {
+                'user_id': user_id,
+                'username': username,
+                'total_orders': total_orders,
+                'total_volume_rub': total_volume_rub
+            }
+            
+            return profile
+
+    except (ConnectionError, TimeoutError, OSError, ValueError) as e:
+        logger.error(f"Failed to get profile for user {user_id}: {e}")
+        return None
+    finally:
+        if conn:
+            await conn.close()
