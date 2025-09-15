@@ -7,6 +7,12 @@
 
 from aiogram.fsm.state import State, StatesGroup
 
+class UserPromoStates(StatesGroup):
+    waiting_for_code = State()
+
+class PromoStates(StatesGroup):
+    waiting_for_promo_code = State()
+
 class TransactionStates(StatesGroup):
     """Состояния для создания транзакции"""
     waiting_for_crypto_amount = State()  # Ожидание ввода суммы в криптовалюте

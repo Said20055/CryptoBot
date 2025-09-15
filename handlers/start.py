@@ -44,16 +44,17 @@ async def start_handler(event: Message | CallbackQuery):
         is_new_user = await save_or_update_user(user_id, username, full_name)
         logger.info(f"User {user_id} ({username}) {'saved as new' if is_new_user else 'updated'} in DB")
         # Отправляем уведомление админам при каждом /start
-        for admin_id in ADMIN_CHAT_ID:
-            try:
-                await event.bot.send_message(
-                    chat_id=admin_id,
-                    text=f"Пользователь запустил /start:\nUsername: {format_user_display_name(username)}\nПолное имя: {full_name}\nID: {user_id}\nНовый: {is_new_user}",
-                    parse_mode=None
-                )
-                logger.info(f"Notification sent to admin {admin_id} about user {username}")
-            except (ConnectionError, TimeoutError) as e:
-                logger.error(f"Failed to notify admin {admin_id} about user {user_id}: {e}")
+        if is_new_user:
+            for admin_id in ADMIN_CHAT_ID:
+                try:
+                    await event.bot.send_message(
+                        chat_id=admin_id,
+                        text=f"Пользователь запустил /start:\nUsername: {format_user_display_name(username)}\nПолное имя: {full_name}\nID: {user_id}\nНовый: {is_new_user}",
+                        parse_mode=None
+                    )
+                    logger.info(f"Notification sent to admin {admin_id} about user {username}")
+                except (ConnectionError, TimeoutError) as e:
+                    logger.error(f"Failed to notify admin {admin_id} about user {user_id}: {e}")
         await event.answer_photo(
             photo=photo_url, caption=text, reply_markup=keyboard, parse_mode="Markdown"
         )
