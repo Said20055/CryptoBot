@@ -134,12 +134,9 @@ async def operator_handler(callback_query: CallbackQuery, state: FSMContext):
             f"Свяжитесь с пользователем для завершения сделки."
         )
         
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        admin_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="💬 Ответить пользователю", callback_data=f"admin_reply_{user_id}")]
-            ]
-        )
+        # Admin keyboard: removed direct reply button to let operators send messages without pressing reply
+        from aiogram.types import InlineKeyboardMarkup
+        admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         
         for admin_id in ADMIN_CHAT_ID:
             try:
@@ -220,12 +217,9 @@ async def image_handler(message: Message):
             f"Пользователь отправил изображение. Ответьте ему, используя кнопку ниже."
         )
         
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        admin_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="💬 Ответить пользователю", callback_data=f"admin_reply_{user_id}")]
-            ]
-        )
+        # Admin keyboard: removed direct reply button to let operators send messages without pressing reply
+        from aiogram.types import InlineKeyboardMarkup
+        admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         
         for admin_id in ADMIN_CHAT_ID:
             try:

@@ -26,107 +26,10 @@ from utils.states import PromoStates
 class BroadcastStates(StatesGroup):
     waiting_for_message = State()
 
-async def users_handler(message: Message):
-    """Обработчик команды /users"""
-    user_id = message.from_user.id
-    if user_id not in ADMIN_CHAT_ID:
-        await message.answer("Эта команда доступна только администраторам.")
-        logger.info(f"User {user_id} attempted to use /users but is not an admin")
-        return
 
-    try:
-        users = await find_all_users()
-        if not users:
-            await message.answer("Пользователи не найдены в базе данных.")
-            logger.info("No users found in database for /users command")
-            return
-
-        # Создаём DataFrame из данных пользователей, исключая invite_link_issued и subscription_duration
-        columns = ["user_id", "username", "full_name", "email", "is_subscribed", "subscription_end", "created_at"]
-        df = pd.DataFrame(users, columns=["user_id", "username", "full_name", "email", "is_subscribed", "subscription_end", "created_at", "invite_link_issued", "subscription_duration"])
-        df = df[columns]  # Убираем ненужные столбцы
-        
-        # Преобразуем столбцы для удобства чтения
-        df["is_subscribed"] = df["is_subscribed"].apply(lambda x: "Да" if x else "Нет")
-        # Преобразуем даты в строки, обрабатывая NaT и None
-        df["subscription_end"] = pd.to_datetime(df["subscription_end"], errors='coerce').dt.strftime("%d.%m.%Y %H:%M:%S").fillna("Нет")
-        df["created_at"] = pd.to_datetime(df["created_at"], errors='coerce').dt.strftime("%d.%m.%Y %H:%M:%S").fillna("Нет")
-
-        # Создаём Excel-файл в памяти
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name="Users")
-            worksheet = writer.sheets["Users"]
-            
-            # Определяем цвета и стили
-            header_fill = PatternFill(start_color="4682B4", end_color="4682B4", fill_type="solid")  # Синий (SteelBlue)
-            white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")  # Белый
-            gray_fill = PatternFill(start_color="EAEAE9", end_color="EAEAE9", fill_type="solid")  # Светло-серый (#EAEAE9)
-            header_font = Font(color="FFFFFF", bold=True)  # Белый текст, жирный шрифт
-            header_alignment = Alignment(horizontal="center", vertical="center")
-            # Определяем границы
-            thin_border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-            
-            # Применяем стили к заголовкам
-            for col_num, column in enumerate(df.columns, 1):
-                cell = worksheet.cell(row=1, column=col_num)
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = header_alignment
-                cell.border = thin_border
-                
-                # Настраиваем ширину столбца
-                max_length = max(
-                    df[column].astype(str).map(len).max(),  # Максимальная длина содержимого
-                    len(str(column))  # Длина заголовка
-                )
-                adjusted_width = max_length + 2
-                worksheet.column_dimensions[get_column_letter(col_num)].width = adjusted_width
-            
-            # Чередование цветов строк и добавление границ
-            for row_num in range(2, len(df) + 2):
-                fill = gray_fill if (row_num % 2 == 0) else white_fill
-                for col_num in range(1, len(df.columns) + 1):
-                    cell = worksheet.cell(row=row_num, column=col_num)
-                    cell.fill = fill
-                    cell.border = thin_border
-            
-            # Добавляем фильтры для сортировки
-            worksheet.auto_filter.ref = f"A1:{get_column_letter(len(df.columns))}{len(df) + 1}"
-        
-        output.seek(0)
-        
-        # Отправляем файл админу
-        file = BufferedInputFile(output.getvalue(), filename="users.xlsx")
-        await message.answer_document(file, caption="Список пользователей из базы данных")
-        logger.info(f"User {user_id} received users list as Excel file")
-        
-    except (IOError, ValueError, KeyError) as e:
-        await message.answer("Ошибка при генерации списка пользователей. Пожалуйста, попробуйте позже.")
-        logger.error(f"Failed to generate users list for user {user_id}: {e}")
-
-async def log_handler(message: Message):
-    """Обработчик команды /log"""
-    user_id = message.from_user.id
-    if user_id not in ADMIN_CHAT_ID:
-        await message.answer("Эта команда доступна только администраторам.")
-        logger.info(f"User {user_id} attempted to use /log but is not an admin")
-        return
-
-    log_file_path = "logging.log"
-    try:
-        if not os.path.exists(log_file_path):
-            await message.answer("Файл логов не найден.")
-            logger.info("Log file not found for /log command")
-            return
-
-        with open(log_file_path, "rb") as f:
-            file = BufferedInputFile(f.read(), filename="bot.log")
-            await message.answer_document(file, caption="Файл логов бота")
-            logger.info(f"User {user_id} received log file")
-    except (IOError, FileNotFoundError) as e:
-        await message.answer("Ошибка при отправке файла логов. Пожалуйста, попробуйте позже.")
-        logger.error(f"Failed to send log file to user {user_id}: {e}")
+# Состояния для ответа админа пользователю (перенесены на уровень модуля)
+class AdminReplyStates(StatesGroup):
+    waiting_for_reply_message = State()
 
 async def send_handler(message: Message, state: FSMContext):
     """Обработчик команды /send"""
@@ -162,10 +65,6 @@ async def admin_reply_handler(callback_query: CallbackQuery, state: FSMContext):
         callback_query: Callback query от нажатия кнопки "Ответить пользователю"
         state: FSM состояние
     """
-    class AdminReplyStates(StatesGroup):
-        """Состояния для ответа админа пользователю."""
-        waiting_for_reply_message = State()
-    
     user_id = callback_query.from_user.id
     if user_id not in ADMIN_CHAT_ID:
         await callback_query.answer("Эта функция доступна только администраторам.")

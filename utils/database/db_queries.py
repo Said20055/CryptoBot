@@ -35,18 +35,14 @@ async def find_all_users(cursor: aiosqlite.Cursor) -> List[tuple]:
     return await cursor.fetchall()
 
 async def get_user_profile(cursor: aiosqlite.Cursor, user_id: int) -> Optional[Dict[str, Any]]:
-    """Получает профиль пользователя, включая статистику."""
+    """Получает профиль пользователя, считая только УСПЕШНЫЕ сделки."""
     await cursor.execute("SELECT username FROM users WHERE user_id = ?", (user_id,))
     user_data = await cursor.fetchone()
     if not user_data:
         return None
 
     await cursor.execute(
-        """
-        SELECT COUNT(order_id), COALESCE(SUM(amount_rub), 0)
-        FROM orders
-        WHERE user_id = ? AND status = 'completed'
-        """,
+        "SELECT COUNT(order_id), COALESCE(SUM(amount_rub), 0) FROM orders WHERE user_id = ? AND status = 'completed'",
         (user_id,)
     )
     stats_data = await cursor.fetchone()
@@ -62,15 +58,17 @@ async def get_user_profile(cursor: aiosqlite.Cursor, user_id: int) -> Optional[D
 
 async def create_order(cursor: aiosqlite.Cursor, user_id: int, username: str, action: str, 
                       crypto: str, amount_crypto: float, amount_rub: float, 
-                      phone_and_bank: str, promo_code: Optional[str]) -> int:
-    """Создает новую заявку и возвращает ее ID."""
+                      phone_and_bank: str, promo_code: Optional[str],
+                      topic_id: int) -> int:
+    """Создает новую заявку, сохраняя ID темы, и возвращает ее ID."""
     await cursor.execute('''
-        INSERT INTO orders (user_id, username, action, crypto, 
+        INSERT INTO orders (user_id, topic_id, username, action, crypto, 
                           amount_crypto, amount_rub, phone_and_bank, created_at, promo_code_used)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, username, action, crypto, amount_crypto, amount_rub, phone_and_bank, datetime.now(), promo_code))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, topic_id, username, action, crypto, amount_crypto, amount_rub, 
+          phone_and_bank, datetime.now(), promo_code))
     order_id = cursor.lastrowid
-    logger.info(f"Created order #{order_id} for user {user_id}. Promo: {promo_code}")
+    logger.info(f"Created order #{order_id} in topic #{topic_id} for user {user_id}. Promo: {promo_code}")
     return order_id
 
 async def update_order_status(cursor: aiosqlite.Cursor, order_id: int, new_status: str) -> bool:
@@ -80,17 +78,54 @@ async def update_order_status(cursor: aiosqlite.Cursor, order_id: int, new_statu
         logger.error(f"Attempted to set an invalid order status: {new_status}")
         return False
         
-    try:
-        await cursor.execute(
-            "UPDATE orders SET status = ? WHERE order_id = ?",
-            (new_status, order_id)
-        )
-        # rowcount > 0 означает, что строка была найдена и обновлена
-        return cursor.rowcount > 0
-    except Exception as e:
-        logger.error(f"Failed to update status for order #{order_id}: {e}", exc_info=True)
-        return False
+    await cursor.execute(
+        "UPDATE orders SET status = ? WHERE order_id = ?",
+        (new_status, order_id)
+    )
+    return cursor.rowcount > 0
+
+async def get_order_status(cursor: aiosqlite.Cursor, order_id: int) -> Optional[str]:
+    """Возвращает текущий статус заявки."""
+    await cursor.execute("SELECT status FROM orders WHERE order_id = ?", (order_id,))
+    result = await cursor.fetchone()
+    return result[0] if result else None
+
+# --- НОВАЯ ФУНКЦИЯ: Поиск активной заявки для защиты от спама ---
+async def get_active_order_for_user(cursor: aiosqlite.Cursor, user_id: int) -> Optional[dict]:
+    """Ищет активную (в обработке) заявку для пользователя и возвращает ее детали (С ЛОГИРОВАНИЕМ)."""
+    logger.info(f"DB Query: Searching for active order with status 'processing' for user_id={user_id}")
+    await cursor.execute(
+        """
+        SELECT order_id, topic_id, action, crypto, amount_crypto, amount_rub, phone_and_bank
+        FROM orders 
+        WHERE user_id = ? AND status = 'processing'
+        """,
+        (user_id,)
+    )
+    row = await cursor.fetchone()
+    if row:
+        result = {
+            'order_id': row[0], 'topic_id': row[1], 'action': row[2],
+            'crypto': row[3], 'amount_crypto': row[4], 'total_amount': row[5],
+            'user_input': row[6]
+        }
+        logger.info(f"DB Query: Found active order for user_id={user_id}. Data: {result}")
+        return result
     
+    logger.info(f"DB Query: No active order found for user_id={user_id}.")
+    return None
+
+# --- НОВАЯ ФУНКЦИЯ: Поиск заявки по ID темы для команд в группе ---
+async def get_order_by_topic_id(cursor: aiosqlite.Cursor, topic_id: int) -> Optional[dict]:
+    """Ищет заявку по ID ее темы в Telegram."""
+    await cursor.execute(
+        "SELECT order_id, user_id FROM orders WHERE topic_id = ?",
+        (topic_id,)
+    )
+    row = await cursor.fetchone()
+    if row:
+        return {'order_id': row[0], 'user_id': row[1]}
+    return None
 # --- PROMO CODE QUERIES ---
 
 async def add_promo_code(cursor: aiosqlite.Cursor, code: str, total_uses: int) -> bool:

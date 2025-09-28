@@ -21,6 +21,7 @@ admin_ids_str = os.getenv("ADMIN_CHAT_IDS")
 # Преобразуем строку в список целых чисел, убирая лишние пробелы
 ADMIN_CHAT_ID = [int(admin_id.strip()) for admin_id in admin_ids_str.split(',')] if admin_ids_str else []
 
+SUPPORT_GROUP_ID = int(os.getenv("SUPPORT_GROUP_ID", 0))
 
 # --- Crypto Wallets ---
 # Загружаем адреса кошельков. Если переменная не найдена, используется пустая строка.

@@ -47,7 +47,7 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎁 Активировать промокод", callback_data="activate_promo"),
             ],
             [
-                InlineKeyboardButton(text="⭐ Отзывы", url="https://t.me/ExpressObmenChannel"),
+                InlineKeyboardButton(text="⭐ Отзывы", url="https://t.me/+obvt9s7jKgYzNzUy"),
             ],
         ]
     )
@@ -115,24 +115,17 @@ def get_payment_method_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def get_final_actions_keyboard(order_id: int) -> InlineKeyboardMarkup:
-    """
-    Возвращает клавиатуру после создания заявки (ИСПРАВЛЕННАЯ ВЕРСИЯ).
-    Кнопка отмены теперь содержит ID заявки.
-    """
-    rows = [
-        # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-        [InlineKeyboardButton(text="❌ Отменить заявку", callback_data=f"cancel_order_{order_id}")],
-        [InlineKeyboardButton(text="👨‍💼 Связаться с оператором", url="https://t.me/jenya2hh")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    """Клавиатура после создания заявки."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✍️ Ответить оператору", callback_data="reply_to_active_order")],
+        [InlineKeyboardButton(text="❌ Отменить заявку", callback_data=f"cancel_order_{order_id}")]
+    ])
 
 def get_admin_reply_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Возвращает клавиатуру с кнопкой "Ответить пользователю" для админа."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Ответить пользователю", callback_data=f"admin_reply_{user_id}")]
-        ]
-    )
+    # Removed direct "Reply to user" button to allow operators to reply without using Reply.
+    # Return an empty keyboard (no action buttons).
+    return InlineKeyboardMarkup(inline_keyboard=[])
 def get_reply_to_operator_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура для ответа оператору (добавляется к сообщениям от оператора)."""
     return InlineKeyboardMarkup(
@@ -140,6 +133,16 @@ def get_reply_to_operator_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💬 Ответить оператору", callback_data="reply_to_operator")]
         ]
     )
+
+
+def get_persistent_reply_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура, которая управляет сессией ответа (начать/закончить).
+    Используется для того, чтобы один клик открывал сессию обмена сообщениями без необходимости
+    нажимать кнопку для каждого сообщения.
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✍️ Завершить переписку", callback_data="end_reply_session")]
+    ])
 
 # --- Функции для генерации текстов сообщений ---
 
@@ -277,7 +280,10 @@ def get_final_confirmation_text(
         f"Ожидайте подтверждения от оператора."
     )
 
-def get_admin_order_notification(
+
+
+
+def get_admin_order_notification_for_topic(
     order_id: int,
     order_number: int,
     user_id: int,
@@ -286,22 +292,24 @@ def get_admin_order_notification(
     user_input: str
 ) -> Tuple[str, InlineKeyboardMarkup]:
     """
-    Формирует уведомление для админа о новой заявке (ФИНАЛЬНАЯ ВЕРСИЯ).
-    Принимает и order_id (для кнопок), и order_number (для текста).
+    Формирует текст с деталями заявки для отправки в тему группы.
+    Возвращает ТОЛЬКО текст (str), без клавиатуры.
     """
+    # Безопасно извлекаем данные из словаря FSM
     action = order_data.get('action', 'N/A').title()
     crypto = order_data.get('crypto', 'N/A')
     
-    # Форматирование числовых значений для красивого вывода
+    # Форматируем все числовые значения для красивого вывода
     amount_crypto_str = f"{order_data.get('amount_crypto', 0):,.8f}".rstrip('0').rstrip('.')
     amount_rub_str = f"{order_data.get('amount_rub', 0):,.2f}".replace(",", " ")
     service_commission_str = f"{order_data.get('service_commission_rub', 0):,.2f}".replace(",", " ")
     network_fee_str = f"{order_data.get('network_fee_rub', 0):,.2f}".replace(",", " ")
     total_amount_str = f"{order_data.get('total_amount', 0):,.2f}".replace(",", " ")
     
+    # Определяем заголовок для реквизитов пользователя
     user_details_title = "Реквизиты для получения RUB:" if order_data.get('action') == 'sell' else f"Адрес кошелька {crypto}:"
 
-    # Формируем список с деталями заявки
+    # Формируем список с деталями заявки для удобства сборки
     details = [
         f"👤 *Пользователь:* {format_user_display_name(username)} (`{user_id}`)",
         f"\n*Детали заявки:*",
@@ -316,21 +324,20 @@ def get_admin_order_notification(
         f"`{user_input}`"
     ]
     
-    # Если был применен промокод, добавляем плашку
+    # Если был применен промокод, добавляем заметную плашку в начало
     if order_data.get('promo_applied'):
         details.insert(1, "✅ *ИСПОЛЬЗОВАН ПРОМОКОД*")
 
-    # Безопасно объединяем детали в одну строку
+    # Безопасно объединяем детали в одну строку, чтобы избежать SyntaxError
     details_str = "\n".join(details)
     
-    # Формируем основной текст, используя "красивый" номер заявки
+    # Собираем финальный текст сообщения
     admin_text = (
-        f"🔔 *Новая заявка #{order_number}*\n"
+        f"🔔 *Детали заявки #{order_number}*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"{details_str}"
+        f"{details_str}\n\n"
     )
-
-    # Создаем клавиатуру, используя реальный, уникальный order_id для callback_data
+    
     admin_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -392,3 +399,20 @@ def get_user_reply_notification(username: str, user_id: int, user_reply: str) ->
         f"📝 *Текст:*\n{user_reply}"
     )
     return admin_text, get_admin_reply_keyboard(user_id)
+
+def get_final_confirmation_text_with_topic(order_number: int) -> str:
+    """Финальное подтверждение для пользователя с информацией о тикете."""
+    return (
+        f"✅ *Ваша заявка #{order_number} успешно создана!*\n\n"
+        f"Оператор уже получил уведомление и скоро свяжется с вами прямо в теме с вашей заявкой.\n\n"
+        f"Всю дальнейшую переписку, пожалуйста, ведите в этой теме."
+    )
+
+
+
+
+def get_cancel_keyboard() -> InlineKeyboardMarkup:
+    """Возвращает простую клавиатуру с кнопкой "Отмена"."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel_transaction")]
+    ])
