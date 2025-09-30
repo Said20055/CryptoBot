@@ -1,4 +1,7 @@
+import html
+
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from typing import Tuple
 
 # Импортируем наши фабрики колбеков
@@ -105,34 +108,19 @@ def get_rub_input_keyboard(action: str, crypto: str) -> InlineKeyboardMarkup:
     )
     return keyboard
 
-def get_payment_method_keyboard() -> InlineKeyboardMarkup:
-    """Возвращает клавиатуру выбора способа оплаты."""
-    rows = [
-        [InlineKeyboardButton(text="💳 СБП", callback_data="payment_sbp")],
-        [InlineKeyboardButton(text="👨‍💼 Через оператора", callback_data="payment_operator")],
-        [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel_transaction")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+def get_final_confirmation_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Все верно, получить реквизиты", callback_data="final_confirm_and_get_requisites")
+    builder.button(text="❌ Отменить", callback_data="cancel_transaction")
+    builder.adjust(1)
+    return builder.as_markup()
 
 def get_final_actions_keyboard(order_id: int) -> InlineKeyboardMarkup:
-    """Клавиатура после создания заявки."""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✍️ Ответить оператору", callback_data="reply_to_active_order")],
-        [InlineKeyboardButton(text="❌ Отменить заявку", callback_data=f"cancel_order_{order_id}")]
-    ])
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отменить заявку", callback_data=f"cancel_order_{order_id}")
+    return builder.as_markup()
 
-def get_admin_reply_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    """Возвращает клавиатуру с кнопкой "Ответить пользователю" для админа."""
-    # Removed direct "Reply to user" button to allow operators to reply without using Reply.
-    # Return an empty keyboard (no action buttons).
-    return InlineKeyboardMarkup(inline_keyboard=[])
-def get_reply_to_operator_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для ответа оператору (добавляется к сообщениям от оператора)."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Ответить оператору", callback_data="reply_to_operator")]
-        ]
-    )
+
 
 
 def get_persistent_reply_keyboard() -> InlineKeyboardMarkup:
@@ -187,41 +175,58 @@ def get_rub_prompt_text(action: str, crypto: str, rate: float) -> str:
 def get_transaction_summary_text(
     action: str, crypto: str, amount_crypto: float, amount_rub: float,
     total_amount: float, service_commission_rub: float, network_fee_rub: float,
-    promo_applied: bool
+    promo_applied: bool, user_requisites: str # <-- НОВЫЙ ПАРАМЕТР
 ) -> str:
-    """Формирует итоговый текст с расчетом транзакции для подтверждения."""
-    amount_crypto_str = f"{amount_crypto:,.8f}".rstrip('0').rstrip('.')
-    amount_rub_str = f"{amount_rub:,.2f}".replace(",", " ")
-    service_commission_str = f"{service_commission_rub:,.2f}".replace(",", " ")
-    network_fee_str = f"{network_fee_rub:,.2f}".replace(",", " ")
-    total_amount_str = f"{total_amount:,.2f}".replace(",", " ")
+    """
+    (ИЗМЕНЕНО) Формирует текст с полным обзором транзакции, включая реквизиты пользователя.
+    """
+    commission_info = "Без комиссии ✨" if promo_applied else f"{service_commission_rub:.2f} RUB"
+    network_fee_info = "Покрывается нами" if promo_applied else f"{network_fee_rub:.2f} RUB"
+    
+    if action == 'buy':
+        requisites_title = "Ваш кошелек для получения"
+        total_line = f"<b>К оплате:</b> <code>{total_amount:.2f} RUB</code>"
+    else: # sell
+        requisites_title = "Ваши реквизиты для получения"
+        total_line = f"<b>К получению:</b> <code>{total_amount:.2f} RUB</code>"
 
-    action_title = f"*Подтвердите продажу {crypto}*" if action == 'sell' else f"*Подтвердите покупку {crypto}*"
-    final_line_title = "Итого к получению:" if action == 'sell' else "Итого к оплате:"
+    # Безопасно экранируем ввод пользователя
+    safe_user_requisites = html.escape(user_requisites)
 
-    details = [
-        f"💎 *Сумма в {crypto}:* `{amount_crypto_str}`",
-        f"💰 *Эквивалент в рублях:* `{amount_rub_str} RUB`"
-    ]
-
-    if promo_applied:
-        details.append("\n✅ *Промокод применен*")
-        details.append(f"  - Комиссия сервиса: `0.00 RUB`")
-        details.append(f"  - Комиссия сети: `0.00 RUB`")
-    else:
-        details.append("\n🧾 *Комиссии*")
-        details.append(f"  - Комиссия сервиса: `{service_commission_str} RUB`")
-        details.append(f"  - Комиссия сети: `{network_fee_str} RUB`")
-
-    details_str = "\n".join(details)
     return (
-        f"{action_title}\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"{details_str}\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"*{final_line_title}* `{total_amount_str} RUB`\n\n"
-        f"Выберите способ оплаты/получения:"
+        f"<b>🔍 Пожалуйста, проверьте все данные:</b>\n\n"
+        f"<b>Действие:</b> {'Покупка' if action == 'buy' else 'Продажа'} {crypto.upper()}\n"
+        f"<b>Сумма в криптовалюте:</b> <code>{amount_crypto:.8f} {crypto.upper()}</code>\n"
+        f"<b>Сумма в рублях:</b> <code>{amount_rub:.2f} RUB</code>\n\n"
+        f"<b>{requisites_title}:</b>\n"
+        f"<code>{safe_user_requisites}</code>\n\n"
+        f"<b>Комиссия сервиса:</b> {commission_info}\n"
+        f"<b>Комиссия сети:</b> {network_fee_info}\n\n"
+        f"{total_line}\n\n"
+        f"Если все верно, нажмите кнопку ниже."
     )
+
+def get_user_requisites_prompt_text(action: str, crypto: str) -> str:
+    """
+    Возвращает текст с просьбой ввести реквизиты.
+    Текст зависит от того, покупает пользователь крипту или продает.
+    """
+    if action == 'buy':
+        # Если покупает, просим адрес его кошелька
+        prompt = (
+            f"✅ <b>Отлично!</b>\n\n"
+            f"Теперь, пожалуйста, отправьте <b>адрес вашего {crypto.upper()} кошелька</b>, "
+            f"на который мы отправим криптовалюту после получения вашей оплаты."
+        )
+    else: # sell
+        # Если продает, просим банковские реквизиты
+        prompt = (
+            "✅ <b>Отлично!</b>\n\n"
+            "Теперь, пожалуйста, отправьте сообщение с вашими реквизитами для получения оплаты. "
+            "Например:\n"
+            "<code>Иванов Иван Иванович, Сбербанк, 89991234567</code>"
+        )
+    return prompt
 
 def get_sbp_sell_details_text(crypto: str, amount_crypto: float, amount_rub: float, wallet_address: str) -> str:
     """Текст для пользователя при продаже через СБП."""
@@ -292,62 +297,65 @@ def get_admin_order_notification_for_topic(
     user_input: str
 ) -> Tuple[str, InlineKeyboardMarkup]:
     """
-    Формирует текст с деталями заявки для отправки в тему группы.
-    Возвращает ТОЛЬКО текст (str), без клавиатуры.
+    Формирует HTML-текст с деталями заявки для отправки в тему группы.
+    Возвращает текст (str) и клавиатуру (InlineKeyboardMarkup).
     """
     # Безопасно извлекаем данные из словаря FSM
     action = order_data.get('action', 'N/A').title()
     crypto = order_data.get('crypto', 'N/A')
-    
+
     # Форматируем все числовые значения для красивого вывода
     amount_crypto_str = f"{order_data.get('amount_crypto', 0):,.8f}".rstrip('0').rstrip('.')
     amount_rub_str = f"{order_data.get('amount_rub', 0):,.2f}".replace(",", " ")
     service_commission_str = f"{order_data.get('service_commission_rub', 0):,.2f}".replace(",", " ")
     network_fee_str = f"{order_data.get('network_fee_rub', 0):,.2f}".replace(",", " ")
     total_amount_str = f"{order_data.get('total_amount', 0):,.2f}".replace(",", " ")
-    
+
     # Определяем заголовок для реквизитов пользователя
     user_details_title = "Реквизиты для получения RUB:" if order_data.get('action') == 'sell' else f"Адрес кошелька {crypto}:"
 
-    # Формируем список с деталями заявки для удобства сборки
-    details = [
-        f"👤 *Пользователь:* {format_user_display_name(username)} (`{user_id}`)",
-        f"\n*Детали заявки:*",
-        f"  - *Тип:* {action} {crypto}",
-        f"  - *Сумма в крипте:* `{amount_crypto_str} {crypto}`",
-        f"  - *Эквивалент в RUB (чистыми):* `{amount_rub_str} RUB`",
-        f"\n*Комиссии:*",
-        f"  - *Сервис:* `{service_commission_str} RUB`",
-        f"  - *Сеть:* `{network_fee_str} RUB`",
-        f"\n*Итоговая сумма:* `{total_amount_str} RUB`",
-        f"\n*{user_details_title}*",
-        f"`{user_input}`"
-    ]
-    
-    # Если был применен промокод, добавляем заметную плашку в начало
-    if order_data.get('promo_applied'):
-        details.insert(1, "✅ *ИСПОЛЬЗОВАН ПРОМОКОД*")
+    # Экранируем данные от пользователя
+    safe_username = html.escape(username or "N/A")
+    safe_user_input = html.escape(user_input or "N/A")
 
-    # Безопасно объединяем детали в одну строку, чтобы избежать SyntaxError
+    # Формируем список с деталями заявки
+    details = [
+        f"👤 <b>Пользователь:</b> {safe_username} (<code>{user_id}</code>)",
+        f"\n<b>Детали заявки:</b>",
+        f"  - <b>Тип:</b> {action} {crypto}",
+        f"  - <b>Сумма в крипте:</b> <code>{amount_crypto_str} {crypto}</code>",
+        f"  - <b>Эквивалент в RUB (чистыми):</b> <code>{amount_rub_str} RUB</code>",
+        f"\n<b>Комиссии:</b>",
+        f"  - <b>Сервис:</b> <code>{service_commission_str} RUB</code>",
+        f"  - <b>Сеть:</b> <code>{network_fee_str} RUB</code>",
+        f"\n<b>Итоговая сумма:</b> <code>{total_amount_str} RUB</code>",
+        f"\n<b>{html.escape(user_details_title)}</b>",
+        f"<code>{safe_user_input}</code>"
+    ]
+
+    # Если был применён промокод, добавляем заметную плашку в начало
+    if order_data.get('promo_applied'):
+        details.insert(1, "✅ <b>ИСПОЛЬЗОВАН ПРОМОКОД</b>")
+
+    # Собираем финальный текст
     details_str = "\n".join(details)
-    
-    # Собираем финальный текст сообщения
+
     admin_text = (
-        f"🔔 *Детали заявки #{order_number}*\n"
+        f"🔔 <b>Детали заявки #{order_number}</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"{details_str}\n\n"
     )
-    
+
+    # Клавиатура
     admin_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_order_{order_id}_{user_id}"),
                 InlineKeyboardButton(text="❌ Отменить", callback_data=f"reject_order_{order_id}_{user_id}")
-            ],
-            [InlineKeyboardButton(text="💬 Ответить пользователю", callback_data=f"admin_reply_{user_id}")]
+            ]
         ]
     )
-    
+
     return admin_text, admin_keyboard
 
 
@@ -410,6 +418,45 @@ def get_final_confirmation_text_with_topic(order_number: int) -> str:
 
 
 
+def get_active_order_notice_text(order_number: int) -> str:
+    """
+    Возвращает текст-уведомление о том, что у пользователя уже есть активная заявка.
+    """
+    return (
+        f"<b>❗️ Внимание</b>\n\n"
+        f"У вас уже есть активная заявка <b>#{order_number}</b>. "
+        f"Вы не можете создать новую, пока текущая не будет завершена.\n\n"
+        f"Ниже представлена информация о вашей активной заявке:"
+    )
+
+
+def get_requisites_and_chat_prompt_text(action: str, crypto: str, total_amount: float, sbp_phone: str, sbp_bank: str, wallet_address: str) -> str:
+    """
+    Генерирует финальное сообщение с реквизитами и инструкцией для пользователя.
+    """
+    if action == 'buy':
+        # Пользователь покупает крипту, мы даем ему реквизиты для оплаты в рублях
+        payment_details = (
+            f"Для завершения обмена, пожалуйста, переведите <b>{total_amount:.2f} RUB</b> по следующим реквизитам:\n\n"
+            f"📞 Телефон (СБП): <code>{sbp_phone}</code>\n"
+            f"🏦 Банк получателя: <b>{sbp_bank}</b>"
+        )
+        instruction = "После перевода, пожалуйста, отправьте <b>скриншот или чек об оплате</b> в этот чат."
+    
+    else: # sell
+        # Пользователь продает крипту, мы даем ему наш криптокошелек
+        payment_details = (
+            f"Для завершения обмена, пожалуйста, переведите криптовалюту на наш кошелек:\n\n"
+            f"<b>{crypto.upper()} Адрес:</b>\n<code>{wallet_address}</code>"
+        )
+        instruction = "После перевода, пожалуйста, отправьте <b>ID или хэш транзакции</b>, а также <b>ваши реквизиты для получения рублей</b> (номер карты/СБП и банк) в этот чат."
+
+    return (
+        f"✅ <b>Заявка создана!</b>\n\n"
+        f"{payment_details}\n\n"
+        f"‼️ <b>Важно:</b> {instruction}\n\n"
+        f"Оператор скоро подключится к диалогу."
+    )
 
 def get_cancel_keyboard() -> InlineKeyboardMarkup:
     """Возвращает простую клавиатуру с кнопкой "Отмена"."""

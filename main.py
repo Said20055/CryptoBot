@@ -63,10 +63,8 @@ async def main():
     dp.include_router(router.crypto_router)
     dp.include_router(router.admin_router)
     # Include proxy routers if available
-    if getattr(router, 'proxy_private_router', None):
-        dp.include_router(router.proxy_private_router)
-    if getattr(router, 'proxy_group_router', None):
-        dp.include_router(router.proxy_group_router)
+    dp.include_router(router.private_message_router)
+    dp.include_router(router.group_message_router) # <-- Вот он, ключ к решению проблемы!
 
 
     try:

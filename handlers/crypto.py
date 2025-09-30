@@ -1,20 +1,19 @@
-# handlers/crypto.py (ФИНАЛЬНАЯ ВЕРСИЯ, РЕШАЮЩАЯ ПРОБЛЕМУ С NameError)
-
 import aiosqlite
-from aiogram.types import CallbackQuery, Message, InputMediaPhoto
+
+from aiogram import F, Bot
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import AiogramError
 
 from config import SUPPORT_GROUP_ID, SERVICE_COMMISSION_PERCENT, NETWORK_FEE_RUB, CRYPTO_WALLETS, SBP_PHONE, SBP_BANK
 from utils.logging_config import logger
 from utils.states import TransactionStates
-from utils.callbacks import CryptoSelection, RubInputSwitch, CryptoInputSwitch
+from utils.callbacks import CryptoSelection, RubInputSwitch
 from utils.crypto_rates import crypto_rates
 import utils.texts as texts
 from handlers.router import crypto_router as router
-from aiogram import F
 
-# Импортируем из новых файлов базы данных
+# Импортируем из файлов базы данных
 from utils.database.db_connector import DB_NAME
 from utils.database.db_queries import (
     get_order_status, get_user_activated_promo, create_order, clear_user_activated_promo,
@@ -30,10 +29,10 @@ async def sell_handler(callback_query: CallbackQuery, state: FSMContext):
     await state.clear()
     keyboard = texts.get_crypto_selection_keyboard("sell")
     try:
-        await callback_query.message.edit_text(texts.SELL_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="Markdown")
+        await callback_query.message.edit_text(texts.SELL_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="HTML")
     except AiogramError:
-        await callback_query.message.answer(texts.SELL_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="Markdown")
         await callback_query.message.delete()
+        await callback_query.message.answer(texts.SELL_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="HTML")
     await callback_query.answer()
 
 @router.callback_query(F.data == 'buy')
@@ -42,10 +41,10 @@ async def buy_handler(callback_query: CallbackQuery, state: FSMContext):
     await state.clear()
     keyboard = texts.get_crypto_selection_keyboard("buy")
     try:
-        await callback_query.message.edit_text(texts.BUY_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="Markdown")
+        await callback_query.message.edit_text(texts.BUY_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="HTML")
     except AiogramError:
-        await callback_query.message.answer(texts.BUY_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="Markdown")
         await callback_query.message.delete()
+        await callback_query.message.answer(texts.BUY_CRYPTO_TEXT, reply_markup=keyboard, parse_mode="HTML")
     await callback_query.answer()
 
 @router.callback_query(CryptoSelection.filter())
@@ -61,7 +60,7 @@ async def select_crypto_handler(callback_query: CallbackQuery, callback_data: Cr
     await state.set_state(TransactionStates.waiting_for_crypto_amount)
     text = texts.get_crypto_prompt_text(action, crypto, rate)
     keyboard = texts.get_crypto_details_keyboard(action, crypto)
-    await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
+    await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback_query.answer()
 
 @router.callback_query(RubInputSwitch.filter())
@@ -76,10 +75,10 @@ async def switch_to_rub_input_handler(callback_query: CallbackQuery, callback_da
     await state.set_state(TransactionStates.waiting_for_rub_amount)
     text = texts.get_rub_prompt_text(action, crypto, rate)
     keyboard = texts.get_rub_input_keyboard(action, crypto)
-    await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
+    await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback_query.answer()
 
-# --- Блок обработки транзакции ---
+# --- Блок обработки ввода суммы ---
 
 @router.message(TransactionStates.waiting_for_crypto_amount)
 @router.message(TransactionStates.waiting_for_rub_amount)
@@ -88,20 +87,23 @@ async def process_amount_input(message: Message, state: FSMContext):
     try:
         amount = float(message.text.replace(',', '.'))
         if amount <= 0:
-            raise ValueError("Amount must be positive")
+            raise ValueError("Сумма должна быть положительной")
     except ValueError:
         await message.answer("❌ Неверный формат. Введите положительное число (например: 0.001 или 1000):")
         return
+
     data = await state.get_data()
-    action, crypto, current_state = data.get('action'), data.get('crypto'), await state.get_state()
+    action, crypto = data.get('action'), data.get('crypto')
+    current_state = await state.get_state()
     rate = await crypto_rates.get_rate(crypto)
     if not rate:
         await message.answer(f"❌ Не удалось получить курс {crypto}. Попробуйте позже.")
         return
-    if current_state == TransactionStates.waiting_for_rub_amount:
-        amount_rub, amount_crypto = amount, amount / rate
-    else:
-        amount_crypto, amount_rub = amount, amount * rate
+
+    # Расчет сумм
+    amount_rub, amount_crypto = (amount, amount / rate) if current_state == TransactionStates.waiting_for_rub_amount else (amount * rate, amount)
+
+    # Проверка промокода (ИСПРАВЛЕННЫЙ БЛОК)
     promo_applied = False
     try:
         async with aiosqlite.connect(DB_NAME) as db:
@@ -109,262 +111,193 @@ async def process_amount_input(message: Message, state: FSMContext):
                 if await get_user_activated_promo(cursor, message.from_user.id):
                     promo_applied = True
     except Exception as e:
-        logger.error(f"DB error while checking promo: {e}", exc_info=True)
-    if promo_applied:
-        service_commission_rub, network_fee_rub = 0.0, 0.0
-    else:
-        service_commission_rub = amount_rub * (SERVICE_COMMISSION_PERCENT / 100)
-        network_fee_rub = NETWORK_FEE_RUB
-    total_amount = amount_rub - service_commission_rub - network_fee_rub if action == 'sell' else amount_rub + service_commission_rub + network_fee_rub
+        logger.error(f"DB error while checking promo in process_amount_input: {e}", exc_info=True)
+
+    # Расчет комиссий
+    service_commission_rub = 0.0 if promo_applied else amount_rub * (SERVICE_COMMISSION_PERCENT / 100)
+    network_fee_rub = 0.0 if promo_applied else NETWORK_FEE_RUB
+    total_amount = (amount_rub - service_commission_rub - network_fee_rub) if action == 'sell' else (amount_rub + service_commission_rub + network_fee_rub)
     if total_amount < 0: total_amount = 0
+    # Сохраняем все расчеты в состояние
     await state.update_data(
         amount_crypto=amount_crypto, amount_rub=amount_rub, total_amount=total_amount,
         service_commission_rub=service_commission_rub, network_fee_rub=network_fee_rub,
         promo_applied=promo_applied
     )
-    summary_text = texts.get_transaction_summary_text(
-        action=action, crypto=crypto, amount_crypto=amount_crypto, amount_rub=amount_rub,
-        total_amount=total_amount, service_commission_rub=service_commission_rub,
-        network_fee_rub=network_fee_rub, promo_applied=promo_applied
-    )
-    await message.answer(summary_text, reply_markup=texts.get_payment_method_keyboard(), parse_mode="Markdown")
-    await state.set_state(TransactionStates.waiting_for_payment_method)
-
-
-@router.message(TransactionStates.waiting_for_phone)
-async def phone_input_handler(message: Message, state: FSMContext):
-    """
-    Обрабатывает ввод реквизитов, создает тикет или показывает существующий.
-    """
-    user_id = message.from_user.id
-    user_input = message.text.strip()
-    data = await state.get_data()
-    logger.info(f"User {user_id}: Starting phone_input_handler.")
     
-    ### --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ --- ###
-    order_id = None
-    topic_id = None
+    # Теперь запрашиваем реквизиты
+    prompt_text = texts.get_user_requisites_prompt_text(action, crypto)
+    await message.answer(prompt_text, parse_mode="HTML")
+    await state.set_state(TransactionStates.waiting_for_user_requisites)
+
+
+@router.message(TransactionStates.waiting_for_user_requisites)
+async def process_user_requisites_handler(message: Message, state: FSMContext):
+    """
+    (ШАГ 2) Ловит реквизиты, сохраняет их и ПОКАЗЫВАЕТ ФИНАЛЬНОЕ ПОДТВЕРЖДЕНИЕ.
+    """
+    user_requisites = message.text
+    await state.update_data(user_requisites=user_requisites)
+    
+    data = await state.get_data()
+    
+    # Генерируем итоговый текст со всеми данными
+    summary_text = texts.get_transaction_summary_text(
+        action=data['action'], crypto=data['crypto'], amount_crypto=data['amount_crypto'],
+        amount_rub=data['amount_rub'], total_amount=data['total_amount'],
+        service_commission_rub=data['service_commission_rub'], network_fee_rub=data['network_fee_rub'],
+        promo_applied=data['promo_applied'], user_requisites=data['user_requisites']
+    )
+    
+    # Показываем финальное подтверждение с новой кнопкой
+    await message.answer(summary_text, reply_markup=texts.get_final_confirmation_keyboard(), parse_mode="HTML")
+    await state.set_state(None) # Сбрасываем состояние, ждем нажатия кнопки
+
+
+@router.callback_query(F.data == 'final_confirm_and_get_requisites')
+async def final_confirm_handler(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
+    """
+    (ШАГ 3) Ловит нажатие финальной кнопки, СОЗДАЕТ ЗАЯВКУ и переводит в чат.
+    """
+    user_id = callback_query.from_user.id
+    if await get_active_order_for_user(user_id):
+        await callback_query.message.edit_text("❗️ <b>У вас уже есть активная заявка.</b>")
+        await callback_query.answer()
+        return
+        
+    await callback_query.message.edit_reply_markup(None) # Убираем кнопку
+    
+    data = await state.get_data()
+    user_requisites = data.get('user_requisites', 'Не указаны')
     
     try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.cursor() as cursor:
-                logger.info(f"User {user_id}: Checking for an active order...")
-                # use db_helpers.get_active_order_for_user which manages its own connection
-                active_order = await get_active_order_for_user(user_id)
-                
-                if active_order:
-                    logger.warning(f"User {user_id}: Active order found: {active_order}")
-                    order_id = active_order['order_id']
-                    topic_id = active_order.get('topic_id')
-                    if topic_id:
-                        order_number = order_id + 9999
-                        # Topic links removed — only show notice and actions
-                        notice_text = texts.get_active_order_notice_text(order_number)
-                        details_text = texts.get_final_confirmation_text(
-                            action=active_order['action'], crypto=active_order['crypto'],
-                            amount_crypto=active_order['amount_crypto'], total_amount=active_order['total_amount'],
-                            user_input=active_order['user_input'], order_number=order_number
-                        )
-                        await message.answer(notice_text, parse_mode="Markdown")
-                        await message.answer(
-                            details_text,
-                            reply_markup=texts.get_final_actions_keyboard(order_id),
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        await message.answer("⚠️ Найдена старая активная заявка без чата. Обратитесь к оператору.")
-                    return
-
-                logger.info(f"User {user_id}: No active order found. Creating new one.")
-                topic = await message.bot.create_forum_topic(
-                    chat_id=SUPPORT_GROUP_ID, name=f"Заявка от {message.from_user.full_name}"
-                )
-                topic_id = topic.message_thread_id
-                logger.info(f"User {user_id}: Created topic with ID {topic_id}.")
-                promo_to_save = await get_user_activated_promo(cursor, user_id) if data.get('promo_applied') else None
-                order_id = await create_order(
-                    cursor, user_id=user_id, topic_id=topic_id,
-                    username=message.from_user.username or "Нет username",
-                    action=data.get('action'), crypto=data.get('crypto'),
-                    amount_crypto=data.get('amount_crypto'), amount_rub=data.get('total_amount'),
-                    phone_and_bank=user_input, promo_code=promo_to_save
-                )
-                if promo_to_save:
-                    await clear_user_activated_promo(cursor, user_id)
-                await db.commit()
-                logger.info(f"User {user_id}: DB transaction committed. New order_id is {order_id}.")
-
-        order_number = order_id + 9999
-        logger.info(f"User {user_id}: Editing topic {topic_id} with new name...")
-        await message.bot.edit_forum_topic(
-            chat_id=SUPPORT_GROUP_ID,
-            message_thread_id=topic_id,
-            name=f"Заявка #{order_number} от {message.from_user.full_name}"
-        )
-        logger.info(f"User {user_id}: Edited topic name.")
-        admin_text, admin_keyboard = texts.get_admin_order_notification_for_topic( # <-- ИСПРАВЛЕНО
-        order_id=order_id,
-        order_number=order_number,
-        user_id=user_id,
-        username=message.from_user.username or message.from_user.full_name,
-        order_data=data,
-        user_input=user_input
-        )
-        logger.info(f"User {user_id}: Sending details to topic {topic_id}...")
-        await message.bot.send_message(
-            chat_id=SUPPORT_GROUP_ID, message_thread_id=topic_id,
-            text=admin_text, reply_markup=admin_keyboard, parse_mode="Markdown"
-        )
-        logger.info(f"User {user_id}: Details sent successfully.")
-        final_text = texts.get_final_confirmation_text_with_topic(order_number)
-        await message.answer(final_text, reply_markup=texts.get_final_actions_keyboard(order_id), parse_mode="Markdown")
-        logger.info(f"User {user_id}: Final confirmation sent.")
-
+        await _create_order_and_enter_chat(bot, state, user_id, callback_query.from_user, user_requisites)
     except Exception as e:
-        logger.error(f"CRITICAL ERROR in phone_input_handler for user {user_id}: {e}", exc_info=True)
-        await message.answer("❌ Произошла критическая ошибка при создании заявки. Сообщите оператору.")
+        logger.error(f"CRITICAL ERROR in final_confirm_handler for user {user_id}: {e}", exc_info=True)
+        await callback_query.message.answer("❌ Произошла критическая ошибка при создании заявки. Сообщите оператору.")
     finally:
-        await state.clear()
-        logger.info(f"User {user_id}: phone_input_handler finished, state cleared.")
+        await callback_query.answer()
 
-# --- Блок завершения и отмены ---
+
+async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int, from_user, user_requisites: str):
+    """
+    Вспомогательная функция: создает заявку, уведомляет всех и переводит пользователя в режим чата.
+    """
+    # ... (эта функция остается без изменений) ...
+    data = await state.get_data()
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.cursor() as cursor:
+            topic = await bot.create_forum_topic(
+                chat_id=SUPPORT_GROUP_ID, name=f"Заявка от {from_user.full_name}"
+            )
+            promo_code = await get_user_activated_promo(cursor, user_id) if data.get('promo_applied') else None
+            order_id = await create_order(
+                cursor, user_id=user_id, topic_id=topic.message_thread_id,
+                username=from_user.username or "Нет username", action=data.get('action'),
+                crypto=data.get('crypto'), amount_crypto=data.get('amount_crypto'),
+                amount_rub=data.get('total_amount'), phone_and_bank=user_requisites, promo_code=promo_code
+            )
+            if promo_code:
+                await clear_user_activated_promo(cursor, user_id)
+            await db.commit()
+
+    order_number = order_id + 9999
+    await bot.edit_forum_topic(
+        chat_id=SUPPORT_GROUP_ID, message_thread_id=topic.message_thread_id,
+        name=f"Заявка #{order_number} от {from_user.full_name}"
+    )
+    admin_text, admin_keyboard = texts.get_admin_order_notification_for_topic(
+        order_id=order_id, order_number=order_number, user_id=user_id,
+        username=from_user.username or from_user.full_name,
+        order_data=data, user_input=user_requisites
+    )
+    await bot.send_message(
+        chat_id=SUPPORT_GROUP_ID, message_thread_id=topic.message_thread_id,
+        text=admin_text, reply_markup=admin_keyboard, parse_mode="HTML"
+    )
+    
+    action = data.get('action')
+    crypto = data.get('crypto')
+    total_amount = data.get('total_amount')
+    wallet_address = CRYPTO_WALLETS.get(crypto, "Не найден")
+    
+    final_text = texts.get_requisites_and_chat_prompt_text(
+        action, crypto, total_amount, SBP_PHONE, SBP_BANK, wallet_address
+    )
+    await bot.send_message(user_id, final_text, reply_markup=texts.get_final_actions_keyboard(order_id), parse_mode="HTML")
+
+    await state.set_state(TransactionStates.waiting_for_operator_reply)
+    await bot.send_message(
+        user_id,
+        "✍️ Вы вошли в режим чата с оператором. Можете задать вопрос или отправить скриншот.",
+        reply_markup=texts.get_persistent_reply_keyboard()
+    )
+
+
+# --- Блок выбора способа оплаты и создания заявки ---
+
+@router.callback_query(F.data == 'get_requisites')
+async def get_requisites_handler(callback_query: CallbackQuery, state: FSMContext):
+    """
+    (ИЗМЕНЕНО) Универсальный обработчик кнопки 'Получить реквизиты'.
+    Теперь ВСЕГДА запрашивает реквизиты у пользователя, просто с разным текстом.
+    """
+    user_id = callback_query.from_user.id
+    data = await state.get_data()
+    action = data.get('action')
+    crypto = data.get('crypto') # Нам нужна крипта для текста
+
+    await callback_query.message.edit_reply_markup(None)
+    await callback_query.answer()
+
+    if await get_active_order_for_user(user_id):
+        await callback_query.message.answer(
+            "❗️ <b>У вас уже есть активная заявка.</b>\nЗавершите или отмените её, прежде чем создавать новую."
+        )
+        return
+
+    # Получаем правильный текст-приглашение (для buy - кошелек, для sell - банк)
+    prompt_text = texts.get_user_requisites_prompt_text(action, crypto)
+    
+    await callback_query.message.answer(prompt_text, parse_mode="HTML")
+    await state.set_state(TransactionStates.waiting_for_user_requisites)
+
+        
+# --- Блок отмены ---
 
 @router.callback_query(F.data == 'cancel_transaction')
 async def cancel_transaction_handler(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик полной отмены FSM-операции."""
     await state.clear()
     await callback_query.answer("Действие отменено.")
-    from handlers.main import start_handler
+    from handlers.main import start_handler # Локальный импорт для избежания цикличности
     await start_handler(callback_query)
 
-@router.callback_query(F.data == 'cancel_order')
+@router.callback_query(F.data.startswith('cancel_order_'))
 async def cancel_order_handler(callback_query: CallbackQuery):
     """Обработчик отмены уже созданной заявки пользователем."""
-    parts = callback_query.data.split('_')
-    if len(parts) != 3:
+    try:
+        order_id = int(callback_query.data.split('_')[2])
+    except (IndexError, ValueError):
         await callback_query.answer("Ошибка в данных кнопки!", show_alert=True)
         return
-    try:
-        order_id = int(parts[2])
-    except ValueError:
-        await callback_query.answer("Не удалось извлечь ID из кнопки!", show_alert=True)
-        return
+
     try:
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
                 if await get_order_status(cursor, order_id) == 'completed':
-                    await callback_query.answer("Заявка уже подтверждена, отменить нельзя.", show_alert=True)
+                    await callback_query.answer("Заявка уже выполнена, отменить нельзя.", show_alert=True)
                     return
                 await update_order_status(cursor, order_id, "cancelled_by_user")
                 await refund_promo_if_needed(cursor, callback_query.from_user.id, order_id)
                 await db.commit()
     except Exception as e:
         logger.error(f"DB error in user cancel_order for order #{order_id}: {e}", exc_info=True)
-    try:
-        await callback_query.message.delete()
-    except AiogramError: pass
-    from handlers.main import start_handler
-    await start_handler(callback_query)
-    await callback_query.answer("Заявка отменена")
-
-
-@router.callback_query(F.data == 'reply_to_active_order')
-@router.callback_query(F.data == 'reply_to_operator')
-async def initiate_operator_reply(callback_query: CallbackQuery, state: FSMContext):
-    """Унифицированный обработчик, инициирующий отправку сообщения пользователем в тему его заявки.
-    Ставит состояние ожидания ответа оператору и показывает prompt.
-    """
-    # Delegate to proxy contract to handle checks and prompting
-    # Use a safe loader: try to import the proxy module from the handlers package
-    # (handlers.crypto.proxy) first; if that fails (module name ambiguity or
-    # repository-local import issues), fall back to loading the proxy.py by file path.
-    try:
-        from handlers.crypto import proxy as proxy_mod
-    except Exception:
-        # Fallback: load proxy.py by absolute path to avoid ModuleNotFoundError
-        import importlib.util
-        import sys
-        import pathlib
-
-        repo_root = pathlib.Path(__file__).resolve().parents[1]
-        proxy_path = repo_root / 'handlers' / 'crypto' / 'proxy.py'
-        spec = importlib.util.spec_from_file_location('handlers.crypto.proxy', str(proxy_path))
-        proxy_mod = importlib.util.module_from_spec(spec)
-        sys.modules['handlers.crypto.proxy'] = proxy_mod
-        spec.loader.exec_module(proxy_mod)
-
-    res = await proxy_mod.start_user_reply_prompt(callback_query, state)
-    if not res.ok:
-        if res.code == 'db_error':
-            await callback_query.answer("❌ Ошибка базы данных.", show_alert=True)
-        elif res.code == 'no_active_order':
-            await callback_query.answer("⚠️ У вас нет активных заявок для ответа.", show_alert=True)
-    return
-
-
-@router.message(TransactionStates.waiting_for_operator_reply)
-async def operator_reply_handler(message: Message, state: FSMContext):
-    """Унифицированный message-handler, пересылающий сообщение пользователя в тему его заявки."""
-    # Use the same safe loader as above to import handlers.crypto.proxy
-    try:
-        from handlers.crypto import proxy as proxy_mod
-    except Exception:
-        import importlib.util
-        import sys
-        import pathlib
-
-        repo_root = pathlib.Path(__file__).resolve().parents[1]
-        proxy_path = repo_root / 'handlers' / 'crypto' / 'proxy.py'
-        spec = importlib.util.spec_from_file_location('handlers.crypto.proxy', str(proxy_path))
-        proxy_mod = importlib.util.module_from_spec(spec)
-        sys.modules['handlers.crypto.proxy'] = proxy_mod
-        spec.loader.exec_module(proxy_mod)
-
-    await proxy_mod.handle_user_message_to_topic(message, state)
-
-
-@router.callback_query(F.data == 'payment_sbp')
-async def payment_sbp_handler(callback_query: CallbackQuery, state: FSMContext):
-    """
-    Обработчик выбора способа оплаты "СБП".
-    Показывает пользователю реквизиты для перевода и запрашивает его реквизиты.
-    """
-    data = await state.get_data()
-    
-    # Безопасно извлекаем все необходимые данные из состояния
-    action = data.get('action')
-    crypto = data.get('crypto')
-    amount_crypto = data.get('amount_crypto')
-    amount_rub = data.get('amount_rub') # "Чистая" сумма
-    total_amount = data.get('total_amount') # Итоговая сумма с комиссиями
-
-    # Проверка на случай, если состояние было утеряно
-    if not all([action, crypto, amount_crypto is not None, amount_rub is not None, total_amount is not None]):
-        await callback_query.answer("❌ Ошибка: данные транзакции утеряны. Пожалуйста, начните заново.", show_alert=True)
-        await state.clear()
-        # Можно вернуть пользователя в главное меню
-        from handlers.main import start_handler
-        await start_handler(callback_query)
+        await callback_query.answer("Ошибка при отмене заявки в базе данных!", show_alert=True)
         return
 
-    # Генерируем текст в зависимости от действия (покупка или продажа)
-    if action == 'sell':
-        # Пользователь продает крипту -> мы показываем ему НАШ кошелек для пополнения
-        wallet_address = CRYPTO_WALLETS.get(crypto)
-        text = texts.get_sbp_sell_details_text(crypto, amount_crypto, amount_rub, wallet_address)
-    else: # buy
-        # Пользователь покупает крипту -> мы показываем ему НАШИ реквизиты СБП
-        text = texts.get_sbp_buy_details_text(crypto, amount_crypto, total_amount, SBP_PHONE, SBP_BANK)
+    await callback_query.message.delete()
+    await callback_query.answer("✅ Заявка отменена.")
+    from handlers.main import start_handler
+    await start_handler(callback_query)
     
-    # Редактируем предыдущее сообщение, показывая новые инструкции
-    await callback_query.message.edit_text(
-        text, 
-        parse_mode="Markdown", 
-        # Добавляем кнопку "Отмена", чтобы пользователь мог выйти из процесса
-        reply_markup=texts.get_cancel_keyboard() 
-    )
-    
-    # Устанавливаем следующее состояние: ожидание реквизитов от пользователя
-    await state.set_state(TransactionStates.waiting_for_phone)
-    await callback_query.answer()
-    # (Удалены старые дубликаты — оставлены унифицированные handlers выше)
