@@ -16,7 +16,7 @@ from handlers.router import crypto_router as router
 # Импортируем из файлов базы данных
 from utils.database.db_connector import DB_NAME
 from utils.database.db_queries import (
-    get_order_status, get_user_activated_promo, create_order, clear_user_activated_promo,
+    get_order_by_id, get_order_status, get_user_activated_promo, create_order, clear_user_activated_promo,
     update_order_status, refund_promo_if_needed
 )
 from utils.database.db_helpers import get_active_order_for_user
@@ -128,6 +128,7 @@ async def process_amount_input(message: Message, state: FSMContext):
     # Теперь запрашиваем реквизиты
     prompt_text = texts.get_user_requisites_prompt_text(action, crypto)
     await message.answer(prompt_text, parse_mode="HTML")
+    await message.delete()
     await state.set_state(TransactionStates.waiting_for_user_requisites)
 
 
@@ -152,6 +153,7 @@ async def process_user_requisites_handler(message: Message, state: FSMContext):
     # Показываем финальное подтверждение с новой кнопкой
     await message.answer(summary_text, reply_markup=texts.get_final_confirmation_keyboard(), parse_mode="HTML")
     await state.set_state(None) # Сбрасываем состояние, ждем нажатия кнопки
+    await message.delete()
 
 
 @router.callback_query(F.data == 'final_confirm_and_get_requisites')
@@ -165,13 +167,12 @@ async def final_confirm_handler(callback_query: CallbackQuery, state: FSMContext
         await callback_query.answer()
         return
         
-    await callback_query.message.edit_reply_markup(None) # Убираем кнопку
     
     data = await state.get_data()
     user_requisites = data.get('user_requisites', 'Не указаны')
     
     try:
-        await _create_order_and_enter_chat(bot, state, user_id, callback_query.from_user, user_requisites)
+        await _create_order_and_enter_chat(bot, state, user_id, callback_query.from_user, user_requisites, message_to_edit=callback_query.message)
     except Exception as e:
         logger.error(f"CRITICAL ERROR in final_confirm_handler for user {user_id}: {e}", exc_info=True)
         await callback_query.message.answer("❌ Произошла критическая ошибка при создании заявки. Сообщите оператору.")
@@ -179,7 +180,7 @@ async def final_confirm_handler(callback_query: CallbackQuery, state: FSMContext
         await callback_query.answer()
 
 
-async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int, from_user, user_requisites: str):
+async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int, from_user, user_requisites: str,  message_to_edit: Message):
     """
     Вспомогательная функция: создает заявку, уведомляет всех и переводит пользователя в режим чата.
     """
@@ -224,14 +225,16 @@ async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int
     final_text = texts.get_requisites_and_chat_prompt_text(
         action, crypto, total_amount, SBP_PHONE, SBP_BANK, wallet_address
     )
-    await bot.send_message(user_id, final_text, reply_markup=texts.get_final_actions_keyboard(order_id), parse_mode="HTML")
+    
+    
+    
+    await message_to_edit.edit_text(
+        final_text,
+        reply_markup=texts.get_final_actions_keyboard(order_id), 
+        parse_mode="HTML"
+    )
 
     await state.set_state(TransactionStates.waiting_for_operator_reply)
-    await bot.send_message(
-        user_id,
-        "✍️ Вы вошли в режим чата с оператором. Можете задать вопрос или отправить скриншот.",
-        reply_markup=texts.get_persistent_reply_keyboard()
-    )
 
 
 # --- Блок выбора способа оплаты и создания заявки ---
@@ -252,7 +255,7 @@ async def get_requisites_handler(callback_query: CallbackQuery, state: FSMContex
 
     if await get_active_order_for_user(user_id):
         await callback_query.message.answer(
-            "❗️ <b>У вас уже есть активная заявка.</b>\nЗавершите или отмените её, прежде чем создавать новую."
+            "❗️ <b>У вас уже есть активная заявка.</b>\nЗавершите или отмените её, прежде чем создавать новую.", parse_mode="HTML"
         )
         return
 
@@ -270,24 +273,36 @@ async def cancel_transaction_handler(callback_query: CallbackQuery, state: FSMCo
     """Обработчик полной отмены FSM-операции."""
     await state.clear()
     await callback_query.answer("Действие отменено.")
-    from handlers.main import start_handler # Локальный импорт для избежания цикличности
-    await start_handler(callback_query)
+    from handlers.main import start_command_handler
+    await start_command_handler(callback_query)
 
 @router.callback_query(F.data.startswith('cancel_order_'))
 async def cancel_order_handler(callback_query: CallbackQuery):
-    """Обработчик отмены уже созданной заявки пользователем."""
+    """
+    (ИЗМЕНЕНО) Обработчик отмены заявки с уведомлением в группе.
+    """
     try:
         order_id = int(callback_query.data.split('_')[2])
     except (IndexError, ValueError):
         await callback_query.answer("Ошибка в данных кнопки!", show_alert=True)
         return
 
+    order_info = None  # Инициализируем переменную для доступа вне блока try
     try:
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
-                if await get_order_status(cursor, order_id) == 'completed':
+                # 1. Сначала получаем информацию о заявке
+                order_info = await get_order_by_id(cursor, order_id)
+
+                if not order_info:
+                    await callback_query.answer("Заявка не найдена!", show_alert=True)
+                    return
+                
+                if order_info['status'] == 'completed':
                     await callback_query.answer("Заявка уже выполнена, отменить нельзя.", show_alert=True)
                     return
+                
+                # 2. Обновляем статус в БД
                 await update_order_status(cursor, order_id, "cancelled_by_user")
                 await refund_promo_if_needed(cursor, callback_query.from_user.id, order_id)
                 await db.commit()
@@ -296,8 +311,24 @@ async def cancel_order_handler(callback_query: CallbackQuery):
         await callback_query.answer("Ошибка при отмене заявки в базе данных!", show_alert=True)
         return
 
+    # 3. Отправляем уведомление в тему, если отмена в БД прошла успешно
+    if order_info and order_info.get('topic_id'):
+        try:
+            await callback_query.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=order_info['topic_id'],
+                text="❌ <b>Пользователь отменил заявку.</b>",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            # Если не удалось отправить (например, тема удалена), просто логируем
+            logger.warning(f"Could not send cancellation notice to topic for order #{order_id}: {e}")
+
+    # 4. Отвечаем пользователю
     await callback_query.message.delete()
     await callback_query.answer("✅ Заявка отменена.")
+    
+    # Возвращаем пользователя в главное меню
     from handlers.main import start_handler
     await start_handler(callback_query)
     

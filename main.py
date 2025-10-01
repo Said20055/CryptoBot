@@ -18,7 +18,6 @@ from utils.logging_config import logger
 
 # --- ИЗМЕНЕНИЕ: Импортируем фабрики колбеков и состояния для промокодов ---
 from utils.callbacks import CryptoInputSwitch, CryptoSelection, RubInputSwitch
-from handlers.admin import PromoStates
 from handlers.main import UserPromoStates
 
 
@@ -40,10 +39,7 @@ async def main():
         BotCommand(command="/id", description="Получить ваш Telegram ID")
     ]
     admin_commands = default_commands + [
-        BotCommand(command="/users", description="Получить список пользователей"),
-        BotCommand(command="/log", description="Получить файл логов бота"),
-        BotCommand(command="/send", description="Рассылка сообщений"),
-        BotCommand(command="/addpromo", description="Создать промокод")
+        BotCommand(command="/admin", description="Admin panel"),
     ]
 
     await bot.set_my_commands(default_commands)
@@ -58,7 +54,6 @@ async def main():
             logger.error(f"An unexpected error occurred while setting commands for {admin_id}: {e}")
 
     # Регистрация роутеров — handlers/router.py создаёт Router'ы
-    router.register_all_routers()
     dp.include_router(router.main_router)
     dp.include_router(router.crypto_router)
     dp.include_router(router.admin_router)

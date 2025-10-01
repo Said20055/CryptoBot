@@ -121,6 +121,13 @@ def get_final_actions_keyboard(order_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def get_admin_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📢 Сделать рассылку", callback_data="admin_broadcast")
+    builder.button(text="🎁 Создать промокод", callback_data="admin_create_promo")
+    # Сюда можно добавлять новые кнопки
+    builder.adjust(1)
+    return builder.as_markup()
 
 
 def get_persistent_reply_keyboard() -> InlineKeyboardMarkup:
@@ -359,54 +366,6 @@ def get_admin_order_notification_for_topic(
     return admin_text, admin_keyboard
 
 
-def get_operator_request_texts(username: str, user_id: int, data: dict) -> Tuple[str, str]:
-    """Генерирует тексты для запроса оператора."""
-    action = data.get('action', '').title()
-    crypto = data.get('crypto', '')
-    amount_crypto = data.get('amount_crypto', 0)
-    total_amount = data.get('total_amount', 0)
-
-    user_text = (
-        f"👨‍💼 *Ваша заявка передана оператору.*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Пожалуйста, укажите ваши реквизиты в следующем сообщении.\n\n"
-        f"*Пример для продажи:* `+79991234567, Сбербанк`\n"
-        f"*Пример для покупки:* `bc1q...`"
-    )
-
-    admin_text = (
-        f"👨‍💼 *Пользователь запросил оператора*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 *Пользователь:* {format_user_display_name(username)} (`{user_id}`)\n"
-        f"💳 *Операция:* {action} {crypto}\n"
-        f"💎 *Сумма:* `{f'{amount_crypto:,.8f}'.rstrip('0').rstrip('.')} {crypto}`\n"
-        f"💰 *Итоговая сумма:* `{total_amount:,.2f} RUB`\n\n"
-        f"Свяжитесь с пользователем для завершения сделки."
-    )
-    return user_text, admin_text
-
-
-def get_tx_link_notification(username: str, user_id: int, tx_link: str) -> Tuple[str, InlineKeyboardMarkup]:
-    """Уведомление для админа о ссылке на транзакцию."""
-    admin_text = (
-        f"🔗 *Ссылка на транзакцию от пользователя*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 *Пользователь:* {format_user_display_name(username)} (`{user_id}`)\n\n"
-        f"`{tx_link}`\n\n"
-        f"Проверьте транзакцию и свяжитесь с пользователем."
-    )
-    return admin_text, get_admin_reply_keyboard(user_id)
-
-
-def get_user_reply_notification(username: str, user_id: int, user_reply: str) -> Tuple[str, InlineKeyboardMarkup]:
-    """Уведомление для админа о сообщении от пользователя."""
-    admin_text = (
-        f"💬 *Сообщение от пользователя*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 *Пользователь:* {format_user_display_name(username)} (`{user_id}`)\n\n"
-        f"📝 *Текст:*\n{user_reply}"
-    )
-    return admin_text, get_admin_reply_keyboard(user_id)
 
 def get_final_confirmation_text_with_topic(order_number: int) -> str:
     """Финальное подтверждение для пользователя с информацией о тикете."""

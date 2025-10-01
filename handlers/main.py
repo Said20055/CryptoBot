@@ -25,26 +25,36 @@ from utils.states import UserPromoStates
 # --- БЛОК: СТАРТ / ГЛАВНОЕ МЕНЮ ---
 # =============================================================================
 
-async def _show_main_menu(message: Message, is_new_user: bool):
-    """Внутренняя функция для отправки главного меню."""
+async def _show_main_menu(event: Message | CallbackQuery, is_new_user: bool):
+    """Внутренняя функция для отправки главного меню.
+    Поддерживает и Message, и CallbackQuery.
+    """
+    # Для callback обязательно получить Message
+    msg = event.message if isinstance(event, CallbackQuery) else event
+
+    # Уведомление админам о новом пользователе
     if is_new_user:
         for admin_id in ADMIN_CHAT_ID:
             try:
-                await message.bot.send_message(
+                await msg.bot.send_message(
                     chat_id=admin_id,
-                    text=f"Новый пользователь: @{message.from_user.username or 'NoUsername'}\n"
-                         f"Имя: {message.from_user.full_name}\nID: {message.from_user.id}",
-                    parse_mode=None
+                    text=f"Новый пользователь: @{msg.from_user.username or 'NoUsername'}\n"
+                         f"Имя: {msg.from_user.full_name}\nID: {msg.from_user.id}"
                 )
             except Exception as e:
                 logger.error(f"Failed to notify admin {admin_id} about new user: {e}")
-    
-    await message.answer_photo(
+
+    # Отправка фото с главным меню
+    await msg.answer_photo(
         photo=WELCOME_PHOTO_URL,
         caption=WELCOME_TEXT,
         reply_markup=get_main_keyboard(),
-        parse_mode="HTML" # Рекомендую перейти на HTML
+        parse_mode="HTML"
     )
+
+    # Если это callback, обязательно ответить на него, чтобы исчез "часовой индикатор"
+    if isinstance(event, CallbackQuery):
+        await event.answer()
 
 @router.message(Command(commands=['start']))
 async def start_command_handler(message: Message):

@@ -17,21 +17,6 @@ main_router = Router()
 crypto_router = Router()
 admin_router = Router()
 
-
-
-def _register_admin():
-    # Импорт внутри функции, чтобы избежать циклического импорта
-    from handlers import admin
-    admin_router.message.register(admin.broadcast_message_handler, admin.BroadcastStates.waiting_for_message)
-    from handlers.admin import AdminReplyStates
-    admin_router.message.register(admin.admin_reply_message_handler, AdminReplyStates.waiting_for_reply_message)
-
-    admin_router.callback_query.register(admin.cancel_broadcast_handler, F.data == 'cancel_broadcast')
-    # admin_router.callback_query.register(admin.admin_reply_handler, F.data.startswith('admin_reply_'))
-    admin_router.callback_query.register(admin.confirm_order_handler, F.data.startswith('confirm_order_'))
-    admin_router.callback_query.register(admin.reject_order_handler, F.data.startswith('reject_order_'))
-
-
 try:
     
     from .proxy import private_message_router, group_message_router
@@ -41,9 +26,4 @@ except ImportError:
     private_message_router = Router()
     group_message_router = Router()
 
-
-def register_all_routers():
- 
-    _register_admin()
-    
 

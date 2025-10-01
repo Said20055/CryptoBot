@@ -206,3 +206,14 @@ async def refund_promo_if_needed(cursor: aiosqlite.Cursor, user_id: int, order_i
 
     await cursor.execute("UPDATE users SET activated_promo = ? WHERE user_id = ?", (promo_to_refund, user_id))
     logger.info(f"Refunded promo '{promo_to_refund}' to user {user_id} for rejected order #{order_id}.")
+
+async def get_order_by_id(cursor, order_id: int):
+    """Возвращает полную информацию о заявке по ее ID."""
+    await cursor.execute("""
+        SELECT topic_id, status FROM orders WHERE order_id = ?
+    """, (order_id,))
+    result = await cursor.fetchone()
+    if result:
+        # Возвращаем в виде словаря для удобного доступа
+        return {'topic_id': result[0], 'status': result[1]}
+    return None

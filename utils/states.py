@@ -19,3 +19,6 @@ class TransactionStates(StatesGroup):
     waiting_for_rub_amount = State()     # Ожидание ввода суммы в рублях
     waiting_for_user_requisites = State()
     waiting_for_operator_reply = State() # Ожидание ответа оператору
+
+class BroadcastStates(StatesGroup):
+    waiting_for_message = State()

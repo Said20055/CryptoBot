@@ -84,36 +84,7 @@ async def admin_reply_handler(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.answer(f"Напишите сообщение для пользователя {target_user_id}:")
     await callback_query.answer()
 
-async def admin_reply_message_handler(message: Message, state: FSMContext):
-    """Обрабатывает сообщение от админа и пересылает его пользователю."""
-    data = await state.get_data()
-    target_user_id = data.get('target_user_id')
 
-    if not target_user_id:
-        await message.answer("❌ Ошибка: не найден ID пользователя для ответа. Сессия могла истечь.")
-        await state.clear()
-        return
-        
-    # Импортируем функцию здесь, чтобы избежать циклических импортов
-    from utils.texts import get_reply_to_operator_keyboard
-
-    try:
-        # Пересылаем сообщение от админа пользователю
-        await message.bot.send_message(
-            chat_id=target_user_id,
-            text=f"👨‍💼 *Сообщение от оператора:*\n\n{message.text}",
-            reply_markup=get_reply_to_operator_keyboard(),
-            parse_mode="Markdown"
-        )
-        # Сообщаем админу, что все успешно
-        await message.answer("✅ Сообщение успешно отправлено пользователю.")
-        logger.info(f"Admin {message.from_user.id} sent a reply to user {target_user_id}")
-        
-    except AiogramError as e:
-        await message.answer(f"❌ Не удалось отправить сообщение пользователю {target_user_id}. Ошибка: {e}")
-        logger.error(f"Failed to send admin reply to user {target_user_id}: {e}")
-    
-    await state.clear()
     
 async def broadcast_message_handler(message: Message, state: FSMContext):
     """Обработчик рассылки сообщений"""
