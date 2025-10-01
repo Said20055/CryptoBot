@@ -5,7 +5,7 @@ from aiogram.exceptions import AiogramError
 from aiogram import F
 from aiogram.types import CallbackQuery
 from utils.database.db_connector import DB_NAME
-from utils.database.db_queries import refund_promo_if_needed, update_order_status, use_activated_promo
+from utils.database.db_queries import get_order_by_id, refund_promo_if_needed, update_order_status, use_activated_promo
 
 orders_router = Router()
 
@@ -34,6 +34,10 @@ async def confirm_order_handler(callback_query: CallbackQuery):
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
                 # Передаем курсор в функцию
+                order_info = await get_order_by_id(cursor, order_id)
+                if order_info['status'] != 'processing':
+                    await callback_query.answer("Заявка уже выполнена или отменена", show_alert=True)
+                    return
                 await update_order_status(cursor, order_id, "completed")
                 promo_was_used = await use_activated_promo(cursor, user_id, order_id)
                 await db.commit()
@@ -89,6 +93,10 @@ async def reject_order_handler(callback_query: CallbackQuery):
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
                 # Передаем курсор в функцию
+                order_info = await get_order_by_id(cursor, order_id)
+                if order_info['status'] != 'processing':
+                    await callback_query.answer("Заявка уже выполнена или отменена", show_alert=True)
+                    return
                 await update_order_status(cursor, order_id, "rejected")
                 await refund_promo_if_needed(cursor, user_id, order_id)
                 await db.commit()

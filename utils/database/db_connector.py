@@ -5,6 +5,7 @@
 Включает безопасные миграции для обновления структуры таблиц в продакшене.
 """
 import aiosqlite
+from config import CRYPTO_WALLETS, SBP_BANK, SBP_PHONE
 from utils.logging_config import logger
 
 DB_NAME = 'artbot.db'
@@ -71,7 +72,19 @@ async def init_db():
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )
             ''')
-
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            
+            initial_settings = {
+            'sbp_phone': SBP_PHONE,
+            'sbp_bank': SBP_BANK
+        }
+            for crypto, address in CRYPTO_WALLETS.items():
+                initial_settings[f'wallet_{crypto.lower()}'] = address
             # --- БЕЗОПАСНАЯ МИГРАЦИЯ СХЕМЫ ---
             
             # 1. Проверяем таблицу 'orders' на наличие столбца 'topic_id'

@@ -29,9 +29,9 @@ async def save_or_update_user(cursor: aiosqlite.Cursor, user_id: int, username: 
     logger.info(f"User {user_id} {'saved' if is_new_user else 'updated'} in DB.")
     return is_new_user
 
-async def find_all_users(cursor: aiosqlite.Cursor) -> List[tuple]:
-    """Получает список всех пользователей."""
-    await cursor.execute("SELECT user_id, username, full_name FROM users")
+async def find_all_users(cursor):
+    """(ИЗМЕНЕНО) Возвращает ID всех пользователей, используя переданный курсор."""
+    await cursor.execute("SELECT user_id FROM users")
     return await cursor.fetchall()
 
 async def get_user_profile(cursor: aiosqlite.Cursor, user_id: int) -> Optional[Dict[str, Any]]:
@@ -217,3 +217,16 @@ async def get_order_by_id(cursor, order_id: int):
         # Возвращаем в виде словаря для удобного доступа
         return {'topic_id': result[0], 'status': result[1]}
     return None
+
+async def get_all_settings(cursor) -> dict:
+    """Возвращает все настройки из БД в виде словаря."""
+    await cursor.execute("SELECT key, value FROM settings")
+    rows = await cursor.fetchall()
+    return {row[0]: row[1] for row in rows}
+
+async def update_setting(cursor, key: str, value: str):
+    """Обновляет или вставляет настройку (UPSERT)."""
+    await cursor.execute("""
+        INSERT INTO settings (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = ?
+    """, (key, value, value))

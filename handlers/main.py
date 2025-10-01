@@ -18,7 +18,8 @@ from config import ADMIN_CHAT_ID
 from utils.logging_config import logger
 from utils.database.db_connector import DB_NAME
 from utils.database.db_queries import activate_promo_for_user, get_user_profile, save_or_update_user
-from utils.texts import WELCOME_PHOTO_URL, WELCOME_TEXT, format_user_display_name, get_main_keyboard, get_back_to_main_menu_keyboard
+from utils.texts import WELCOME_PHOTO_URL, WELCOME_TEXT, format_user_display_name
+from utils import keyboards
 from utils.states import UserPromoStates
 
 # =============================================================================
@@ -48,7 +49,7 @@ async def _show_main_menu(event: Message | CallbackQuery, is_new_user: bool):
     await msg.answer_photo(
         photo=WELCOME_PHOTO_URL,
         caption=WELCOME_TEXT,
-        reply_markup=get_main_keyboard(),
+        reply_markup=keyboards.get_main_keyboard(),
         parse_mode="HTML"
     )
 
@@ -114,13 +115,13 @@ async def _get_profile_text(user_id: int) -> str:
 async def profile_command_handler(message: Message):
     """Обработчик команды /profile."""
     text = await _get_profile_text(message.from_user.id)
-    await message.answer(text, reply_markup=get_back_to_main_menu_keyboard(), parse_mode="HTML")
+    await message.answer(text, reply_markup=keyboards.get_back_to_main_menu_keyboard(), parse_mode="HTML")
 
 @router.callback_query(F.data == 'profile')
 async def profile_callback_handler(callback_query: CallbackQuery):
     """Обработчик кнопки 'Профиль'."""
     text = await _get_profile_text(callback_query.from_user.id)
-    await callback_query.message.answer(text, reply_markup=get_back_to_main_menu_keyboard(), parse_mode="HTML")
+    await callback_query.message.answer(text, reply_markup=keyboards.get_back_to_main_menu_keyboard(), parse_mode="HTML")
     try:
         await callback_query.message.delete()
     except AiogramError:

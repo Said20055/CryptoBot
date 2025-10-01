@@ -35,8 +35,6 @@ async def main():
         BotCommand(command="/start", description="Запустить бота"),
         BotCommand(command="/profile", description="Показать мой профиль"),
         BotCommand(command="/promo", description="Активировать промокод"),
-        BotCommand(command="/help", description="Получить справку"),
-        BotCommand(command="/id", description="Получить ваш Telegram ID")
     ]
     admin_commands = default_commands + [
         BotCommand(command="/admin", description="Admin panel"),
