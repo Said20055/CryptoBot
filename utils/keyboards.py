@@ -20,6 +20,9 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎁 Активировать промокод", callback_data="activate_promo"),
             ],
             [
+                InlineKeyboardButton(text="🌎 Подключиться к ExpressVPN", url="https://t.me/Express_vpn1_bot"),
+            ],
+            [
                 InlineKeyboardButton(text="⭐ Отзывы", url="https://t.me/+obvt9s7jKgYzNzUy"),
             ],
         ]
@@ -37,7 +40,7 @@ def get_broadcast_confirmation_keyboard():
 def get_back_to_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="main_menu")]
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_main_menu")]
         ]
     )
 

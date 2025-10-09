@@ -86,15 +86,15 @@ def get_transaction_summary_text(
     """
     (ИЗМЕНЕНО) Формирует текст с полным обзором транзакции, включая реквизиты пользователя.
     """
-    commission_info = "Без комиссии ✨" if promo_applied else f"{service_commission_rub:.2f} RUB"
-    network_fee_info = "Покрывается нами" if promo_applied else f"{network_fee_rub:.2f} RUB"
+    commission_info = "Без комиссии ✨" if promo_applied else f"{service_commission_rub:.0f} RUB"
+    network_fee_info = "Покрывается нами" if promo_applied else f"{network_fee_rub:.0f} RUB"
     
     if action == 'buy':
         requisites_title = "Ваш кошелек для получения"
-        total_line = f"<b>К оплате:</b> <code>{total_amount:.2f} RUB</code>"
+        total_line = f"<b>К оплате:</b> <code>{total_amount:.0f} RUB</code>"
     else: # sell
         requisites_title = "Ваши реквизиты для получения"
-        total_line = f"<b>К получению:</b> <code>{total_amount:.2f} RUB</code>"
+        total_line = f"<b>К получению:</b> <code>{total_amount:.0f} RUB</code>"
 
     # Безопасно экранируем ввод пользователя
     safe_user_requisites = html.escape(user_requisites)
@@ -103,7 +103,7 @@ def get_transaction_summary_text(
         f"<b>🔍 Пожалуйста, проверьте все данные:</b>\n\n"
         f"<b>Действие:</b> {'Покупка' if action == 'buy' else 'Продажа'} {crypto.upper()}\n"
         f"<b>Сумма в криптовалюте:</b> <code>{amount_crypto:.8f} {crypto.upper()}</code>\n"
-        f"<b>Сумма в рублях:</b> <code>{amount_rub:.2f} RUB</code>\n\n"
+        f"<b>Сумма в рублях:</b> <code>{amount_rub:.0f} RUB</code>\n\n"
         f"<b>{requisites_title}:</b>\n"
         f"<code>{safe_user_requisites}</code>\n\n"
         f"<b>Комиссия сервиса:</b> {commission_info}\n"
@@ -153,10 +153,10 @@ def get_admin_order_notification_for_topic(
 
     # Форматируем все числовые значения для красивого вывода
     amount_crypto_str = f"{order_data.get('amount_crypto', 0):,.8f}".rstrip('0').rstrip('.')
-    amount_rub_str = f"{order_data.get('amount_rub', 0):,.2f}".replace(",", " ")
-    service_commission_str = f"{order_data.get('service_commission_rub', 0):,.2f}".replace(",", " ")
-    network_fee_str = f"{order_data.get('network_fee_rub', 0):,.2f}".replace(",", " ")
-    total_amount_str = f"{order_data.get('total_amount', 0):,.2f}".replace(",", " ")
+    amount_rub_str = f"{order_data.get('amount_rub', 0):,.0f}".replace(",", " ")
+    service_commission_str = f"{order_data.get('service_commission_rub', 0):,.0f}".replace(",", " ")
+    network_fee_str = f"{order_data.get('network_fee_rub', 0):,.0f}".replace(",", " ")
+    total_amount_str = f"{int(order_data.get('total_amount', 0)):.0f}".replace(",", " ")
 
     # Определяем заголовок для реквизитов пользователя
     user_details_title = "Реквизиты для получения RUB:" if order_data.get('action') == 'sell' else f"Адрес кошелька {crypto}:"
@@ -244,7 +244,7 @@ def get_requisites_and_chat_prompt_text(
     if action == 'buy':
         # Пользователь покупает криптовалюту → переводит рубли
         payment_details = (
-            f"💰 Переведите <b>{total_amount:.2f} RUB</b> по следующим реквизитам:\n\n"
+            f"💰 Переведите <b>{total_amount:.0f} RUB</b> по следующим реквизитам:\n\n"
             f"📞 Телефон (СБП): <code>{sbp_phone}</code>\n"
             f"🏦 Банк получателя: <b>{sbp_bank}</b>"
         )
