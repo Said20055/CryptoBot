@@ -1,9 +1,12 @@
+
+from datetime import datetime, timedelta
 import html
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from typing import Tuple
+from typing import List, Tuple
 
+from .helpers import format_timedelta # <-- Импортируем наш новый хелпер
 
 
 
@@ -34,6 +37,67 @@ BUY_CRYPTO_TEXT = "<b>🧾 Меню покупки</b>\n\nВыберите кр�
 OPERATOR_CONTACT_TEXT = "👨‍💼 <b>Связь с оператором:</b> @jenya2hh\n\nНапишите оператору для получения помощи с обменом."
 SEND_TX_LINK_PROMPT = "📎 <b>Отправьте ссылку на транзакцию в блокчейне.</b>\n\nПосле отправки оператор проверит ее и обработает заявку."
 REPLY_TO_OPERATOR_PROMPT = "💬 <b>Отправьте ваше сообщение для оператора:</b>"
+
+
+
+
+
+
+# ==========================================================
+# ===== НОВЫЕ ТЕКСТЫ И КЛАВИАТУРЫ: СИСТЕМА ЛОТЕРЕИ =========
+# ==========================================================
+
+def get_lottery_menu_text(lottery_info: dict, can_get_ticket: bool) -> str:
+    """Генерирует текст для меню лотереи."""
+    last_play = lottery_info.get('last_play')
+    
+    header = "🎰 <b>Лотерея ExpressObmen P2P</b>\n\n"
+    
+    if can_get_ticket:
+        ticket_text = "✨ У вас есть <b>1</b> бесплатная игра! Готовы испытать удачу?"
+    else:
+        # Рассчитываем время до следующего бесплатного билета
+        next_ticket_time = lottery_info.get('last_ticket') + timedelta(hours=24)
+        time_left = next_ticket_time - datetime.now()
+        formatted_time = format_timedelta(time_left)
+        ticket_text = f"⏳ Следующая бесплатная игра будет доступна через: <b>{formatted_time}</b>"
+
+    cooldown_text = ""
+    if last_play:
+        next_play_time = last_play + timedelta(hours=24)
+        time_left = next_play_time - datetime.now()
+        if time_left.total_seconds() > 0:
+            formatted_time = format_timedelta(time_left)
+            cooldown_text = f"\n\n(Вы уже играли сегодня. Следующая попытка через: <b>{formatted_time}</b>)"
+
+    return f"{header}{ticket_text}{cooldown_text}"
+
+
+def get_lottery_menu_keyboard(can_play: bool) -> InlineKeyboardMarkup:
+    """
+    Генерирует клавиатуру для меню лотереи.
+    Кнопка "Играть" активна только если можно играть.
+    """
+    buttons = []
+    
+    if can_play:
+        buttons.append(
+            [InlineKeyboardButton(text="🎲 Испытать удачу!", callback_data="lottery_play")]
+        )
+        
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_main_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_lottery_win_text(amount: float) -> str:
+    """Генерирует текст поздравления с выигрышем."""
+    return (
+        f"🎉 <b>Поздравляем!</b> 🎉\n\n"
+        f"Вы выиграли <b>{amount:,.2f} RUB</b>!\n\n"
+        f"Средства зачислены на ваш реферальный баланс. Вы можете проверить его в разделе "
+        f"«💎 Реферальная программа»."
+    )
+
+
 
 
 def format_user_display_name(username: str) -> str:
@@ -269,4 +333,104 @@ def get_requisites_and_chat_prompt_text(
         f"✉️ Все ваши сообщения из этого чата автоматически пересылаются оператору, "
         f"и его ответы будут приходить сюда."
     )
+
+
+
+def get_profile_text(
+    user_id: int,
+    profile_data: dict,
+    bot_username: str,
+    ref_info: dict,
+    ref_percentage: float
+) -> str:
+    """Объединённый текст профиля и реферальной программы."""
+
+    # --- Профиль ---
+    if profile_data:
+        username = profile_data['username'] or "не указан"
+        profile_block = (
+            "<b>👤 Ваш профиль</b>\n\n"
+            f"<b>ID:</b> <code>{user_id}</code>\n"
+            f"<b>Никнейм:</b> @{username}\n\n"
+            "<b>📊 Статистика успешных обменов:</b>\n"
+            f"  • <b>Всего завершено:</b> {profile_data['total_orders']}\n"
+            f"  • <b>Общий объём:</b> {profile_data['total_volume_rub']:.2f} RUB"
+        )
+    else:
+        profile_block = (
+            "<b>👤 Ваш профиль</b>\n\n"
+            "Не удалось найти ваши данные. Возможно, у вас ещё не было успешных обменов."
+        )
+
+    # --- Реферальная программа ---
+    referral_link = f"https://t.me/{bot_username}?start=ref{user_id}"
+    balance = ref_info.get('balance', 0.0)
+    referral_count = ref_info.get('referral_count', 0)
+
+    referral_block = (
+        "\n\n<b>👥 Ваша реферальная программа</b>\n\n"
+        f"Приглашайте друзей и получайте <b>{ref_percentage:.1f}%</b> "
+        "с суммы каждого их успешного обмена!\n\n"
+        "🔗 <b>Ваша уникальная ссылка:</b>\n"
+        f"<code>{referral_link}</code>\n"
+        "<i>(Нажмите, чтобы скопировать)</i>\n\n"
+        "📈 <b>Реферальная статистика:</b>\n"
+        f"  • Приглашено пользователей: <b>{referral_count}</b>\n"
+        f"  • Текущий баланс: <b>{balance:,.2f} RUB</b>\n\n"
+        "Накопленные средства можно вывести, когда баланс достигнет минимальной суммы."
+    )
+
+    return [profile_block + referral_block, balance]
+
+
+
+
+
+
+def get_withdrawal_prompt_text(min_amount: int, balance: float) -> str:
+    """Текст с запросом реквизитов для вывода средств."""
+    return (
+        "💰 <b>Вывод реферального баланса</b>\n\n"
+        f"Ваш баланс: <b>{balance:,.2f} RUB</b>.\n"
+        f"Минимальная сумма для вывода: <b>{min_amount} RUB</b>.\n\n"
+        "Пожалуйста, отправьте в следующем сообщении реквизиты для получения средств "
+        "(например, номер карты и название банка).\n\n"
+        "<b>Пример:</b> <code>5555 4444 3333 2222, Сбербанк</code>"
+    )
+
+
+def get_withdrawal_request_admin_notification(user_id: int, username: str, amount: float) -> str:
+    """Текст уведомления для админов о новой заявке на вывод."""
+    return (
+        "💸 <b>Заявка на вывод реферальных средств</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Пользователь:</b> {format_user_display_name(username)} (<code>{user_id}</code>)\n"
+        f"💰 <b>Сумма:</b> <code>{amount:,.2f} RUB</code>\n\n"
+        "Пожалуйста, свяжитесь с пользователем для уточнения реквизитов и обработки выплаты."
+    )
+
+
+def get_referral_earnings_text(earnings: List[Tuple], balance: float) -> str:
+    """Форматирует историю начислений в красивое сообщение."""
+    if not earnings:
+        return (
+            "📈 <b>История начислений</b>\n\n"
+            "У вас пока нет реферальных начислений.\n\n"
+            "Приглашайте друзей по вашей ссылке, и после каждого их успешного обмена вы будете получать вознаграждение!"
+        )
+
+    header = (
+        f"📈 <b>История последних начислений</b>\n"
+        f"💰 Ваш текущий баланс: <b>{balance:,.2f} RUB</b>\n\n"
+    )
+
+    history_lines = []
+    for amount, created_at_str in earnings:
+        created_at_dt = datetime.fromisoformat(created_at_str)
+        formatted_date = created_at_dt.strftime('%d.%m.%Y %H:%M')
+        history_lines.append(f"<code>+{amount:,.2f} RUB</code>   <i>{formatted_date}</i>")
+
+    body = "\n".join(history_lines)
+
+    return f"{header}{body}"
 

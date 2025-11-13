@@ -17,7 +17,8 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             ],
             [
-                InlineKeyboardButton(text="🎁 Активировать промокод", callback_data="activate_promo"),
+                InlineKeyboardButton(text="🎁 Промокод", callback_data="activate_promo"),
+                InlineKeyboardButton(text="🎰 Лотерея", callback_data="lottery_menu") 
             ],
             [
                 InlineKeyboardButton(text="🌎 Подключиться к ExpressVPN", url="https://t.me/Express_vpn1_bot"),
@@ -122,3 +123,20 @@ def get_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel_transaction")]
     ])
+
+
+def get_profile_keyboard(balance: float, min_withdrawal: int) -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для реферального меню."""
+    buttons = [
+        [InlineKeyboardButton(text="📈 Мои начисления", callback_data="ref_earnings_history")],
+    ]
+    
+    # Кнопка вывода средств появляется только тогда, когда баланс достаточный
+    if balance >= min_withdrawal:
+        buttons.append(
+            [InlineKeyboardButton(text=f"💸 Вывести {balance:,.2f} RUB", callback_data="ref_withdraw")]
+        )
+        
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_main_menu")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

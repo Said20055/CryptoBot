@@ -22,6 +22,7 @@ from utils.database.db_queries import (
 )
 from utils.database.db_helpers import get_active_order_for_user
 
+
 # --- Блок навигации и выбора ---
 
 @router.callback_query(F.data == 'sell')
@@ -300,7 +301,8 @@ async def get_requisites_handler(callback_query: CallbackQuery, state: FSMContex
 
     if await get_active_order_for_user(user_id):
         await callback_query.message.answer(
-            "❗️ <b>У вас уже есть активная заявка.</b>\nЗавершите или отмените её, прежде чем создавать новую.", parse_mode="HTML"
+            "❗️У вас уже есть активная заявка.\nЗавершите или отмените её, прежде чем создавать новую."
+
         )
         return
 
@@ -346,6 +348,9 @@ async def cancel_order_handler(callback_query: CallbackQuery):
                 
                 if order_info['status'] == 'completed':
                     await callback_query.answer("Заявка уже выполнена, отменить нельзя.", show_alert=True)
+                    return
+                elif order_info['status'] == 'rejected':
+                    await callback_query.answer("Заявка уже была отменена оператором.", show_alert=True)
                     return
                 
                 # 2. Обновляем статус в БД

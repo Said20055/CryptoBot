@@ -11,23 +11,27 @@ from utils.logging_config import logger
 
 # --- USER QUERIES ---
 
-async def save_or_update_user(cursor: aiosqlite.Cursor, user_id: int, username: str, full_name: str) -> bool:
-    """Сохраняет или обновляет данные пользователя, используя переданный курсор."""
+async def save_or_update_user(cursor: aiosqlite.Cursor, user_id: int, username: str, 
+                              full_name: str, referrer_id: Optional[int] = None) -> bool:
+    """Сохраняет нового пользователя (с реферером) или обновляет существующего."""
     await cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
     is_new_user = await cursor.fetchone() is None
 
     if is_new_user:
+        # Если пользователь новый и пришел по реф. ссылке, записываем реферера
         await cursor.execute(
-            "INSERT INTO users (user_id, username, full_name, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, username, full_name, datetime.now())
+            "INSERT INTO users (user_id, username, full_name, created_at, referrer_id) VALUES (?, ?, ?, ?, ?)",
+            (user_id, username, full_name, datetime.now(), referrer_id)
         )
     else:
+        # Для существующих пользователей просто обновляем данные
         await cursor.execute(
             "UPDATE users SET username = ?, full_name = ? WHERE user_id = ?",
             (username, full_name, user_id)
         )
-    logger.info(f"User {user_id} {'saved' if is_new_user else 'updated'} in DB.")
+    logger.info(f"User {user_id} {'saved' if is_new_user else 'updated'}. Referrer ID: {referrer_id if is_new_user else 'N/A'}.")
     return is_new_user
+
 
 async def find_all_users(cursor):
     """(ИЗМЕНЕНО) Возвращает ID всех пользователей, используя переданный курсор."""
@@ -210,12 +214,13 @@ async def refund_promo_if_needed(cursor: aiosqlite.Cursor, user_id: int, order_i
 async def get_order_by_id(cursor, order_id: int):
     """Возвращает полную информацию о заявке по ее ID."""
     await cursor.execute("""
-        SELECT topic_id, status FROM orders WHERE order_id = ?
+        SELECT topic_id, status, amount_rub FROM orders WHERE order_id = ?
     """, (order_id,))
     result = await cursor.fetchone()
     if result:
         # Возвращаем в виде словаря для удобного доступа
-        return {'topic_id': result[0], 'status': result[1]}
+        logger.info(f"Refunded promo {result}")
+        return {'topic_id': result[0], 'status': result[1], 'amount_rub': result[2]}
     return None
 
 async def get_all_settings(cursor) -> dict:
@@ -230,3 +235,124 @@ async def update_setting(cursor, key: str, value: str):
         INSERT INTO settings (key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = ?
     """, (key, value, value))
+    
+    
+
+async def get_user_referral_info(cursor: aiosqlite.Cursor, user_id: int) -> dict:
+    """Получает полную реферальную информацию о пользователе."""
+    # Получаем баланс и ID реферера
+    await cursor.execute("SELECT referral_balance, referrer_id FROM users WHERE user_id = ?", (user_id,))
+    user_data = await cursor.fetchone() or (0.0, None)
+    
+    # Считаем количество приглашенных им рефералов
+    await cursor.execute("SELECT COUNT(user_id) FROM users WHERE referrer_id = ?", (user_id,))
+    referral_count = (await cursor.fetchone())[0]
+    
+    return {
+        'balance': user_data[0],
+        'referrer_id': user_data[1],
+        'referral_count': referral_count
+    }
+
+async def add_referral_earning(cursor: aiosqlite.Cursor, order_id: int, referral_id: int, 
+                               order_amount: float, percentage: float) -> bool:
+    """Находит реферера, начисляет ему процент и записывает в историю."""
+    # 1. Находим, кто пригласил пользователя, совершившего сделку
+    await cursor.execute("SELECT referrer_id FROM users WHERE user_id = ?", (referral_id,))
+    result = await cursor.fetchone()
+    if not result or not result[0]:
+        return False # У этого пользователя нет реферера
+
+    referrer_id = result[0]
+    
+    # 2. Рассчитываем вознаграждение
+    earning_amount = order_amount * (percentage / 100.0)
+    
+    # 3. Обновляем баланс реферера
+    await cursor.execute(
+        "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
+        (earning_amount, referrer_id)
+    )
+    
+    # 4. Записываем транзакцию в историю
+    await cursor.execute(
+        """INSERT INTO referral_earnings 
+           (referrer_id, referral_id, order_id, amount, created_at) 
+           VALUES (?, ?, ?, ?, ?)""",
+        (referrer_id, referral_id, order_id, earning_amount, datetime.now())
+    )
+    logger.info(f"User {referrer_id} earned {earning_amount:.2f} RUB from referral {referral_id}'s order #{order_id}.")
+    return True
+
+async def create_withdrawal_request(cursor: aiosqlite.Cursor, user_id: int, amount: float, topic_id: int) -> bool:
+    """Создает заявку на вывод и обнуляет баланс пользователя."""
+    await cursor.execute("UPDATE users SET referral_balance = 0.0 WHERE user_id = ?", (user_id,))
+    if cursor.rowcount == 0:
+        return False # Пользователь не найден
+
+    await cursor.execute(
+        "INSERT INTO withdrawal_requests (user_id, amount, created_at, topic_id) VALUES (?, ?, ?, ?)",
+        (user_id, amount, datetime.now(), topic_id)
+    )
+    logger.info(f"User {user_id} created a withdrawal request for {amount:.2f} RUB in topic #{topic_id}.")
+    return True
+
+
+# ==========================================================
+# ===== НОВЫЕ ФУНКЦИИ: СИСТЕМА ЛОТЕРЕИ =====================
+# ==========================================================
+
+async def get_user_lottery_info(cursor: aiosqlite.Cursor, user_id: int) -> dict:
+    """Получает информацию о времени последней игры и получения билета."""
+    await cursor.execute(
+        "SELECT last_lottery_play, last_free_ticket FROM users WHERE user_id = ?",
+        (user_id,)
+    )
+    result = await cursor.fetchone()
+    if result:
+        last_play_str, last_ticket_str = result
+        last_play_dt = datetime.fromisoformat(last_play_str) if last_play_str else None
+        last_ticket_dt = datetime.fromisoformat(last_ticket_str) if last_ticket_str else None
+        return {'last_play': last_play_dt, 'last_ticket': last_ticket_dt}
+    return {'last_play': None, 'last_ticket': None}
+
+async def grant_daily_ticket(cursor: aiosqlite.Cursor, user_id: int) -> bool:
+    """
+    Выдает пользователю ежедневный "билет" (право на игру),
+    обновляя время последнего получения.
+    """
+    await cursor.execute(
+        "UPDATE users SET last_free_ticket = ? WHERE user_id = ?",
+        (datetime.now(), user_id)
+    )
+    logger.info(f"Granted daily lottery ticket for user {user_id}.")
+    return cursor.rowcount > 0
+
+async def play_lottery(cursor: aiosqlite.Cursor, user_id: int, prize_amount: float):
+    """
+    Помечает, что пользователь сыграл, обновляет время игры
+    и начисляет выигрыш на реферальный баланс.
+    """
+    await cursor.execute(
+        """UPDATE users SET 
+           last_lottery_play = ?,
+           referral_balance = referral_balance + ?
+           WHERE user_id = ?""",
+        (datetime.now(), prize_amount, user_id)
+    )
+    logger.info(f"User {user_id} played lottery and won {prize_amount:.2f} RUB.")
+
+async def get_referral_earnings_history(cursor: aiosqlite.Cursor, user_id: int, limit: int = 10) -> List[Tuple]:
+    """
+    Получает историю последних реферальных начислений для пользователя.
+    """
+    await cursor.execute(
+        """
+        SELECT amount, created_at FROM referral_earnings
+        WHERE referrer_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (user_id, limit)
+    )
+    return await cursor.fetchall()

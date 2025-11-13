@@ -3,7 +3,7 @@
 """
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command
+
 from aiogram.types import BotCommandScopeChat, BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -12,6 +12,7 @@ from aiogram.exceptions import AiogramError
 from config import TOKEN, ADMIN_CHAT_ID
 from handlers import main as main_handlers, crypto, admin
 from handlers import router
+from handlers.lottery import lottery_router
 from utils.states import TransactionStates
 from utils.database.db_connector import init_db
 from utils.logging_config import logger
@@ -53,6 +54,7 @@ async def main():
 
     # Регистрация роутеров — handlers/router.py создаёт Router'ы
     dp.include_router(router.main_router)
+    dp.include_router(lottery_router)
     dp.include_router(router.crypto_router)
     dp.include_router(router.admin_router)
     # Include proxy routers if available

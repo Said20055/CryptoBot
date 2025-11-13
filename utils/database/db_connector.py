@@ -27,6 +27,13 @@ async def init_db():
                     is_subscribed INTEGER DEFAULT 0,
                     subscription_end DATETIME,
                     created_at DATETIME,
+                    referrer_id INTEGER,              
+                    referral_balance REAL DEFAULT 0.0,  
+                    
+                    -- Система лотереи
+                    last_lottery_play DATETIME,    
+                    last_free_ticket DATETIME ,       
+                    
                     invite_link_issued INTEGER DEFAULT 0,
                     subscription_duration INTEGER DEFAULT 0,
                     activated_promo TEXT DEFAULT NULL
@@ -79,29 +86,56 @@ async def init_db():
                 )
             """)
             
-            initial_settings = {
-            'sbp_phone': SBP_PHONE,
-            'sbp_bank': SBP_BANK
-        }
-            for crypto, address in CRYPTO_WALLETS.items():
-                initial_settings[f'wallet_{crypto.lower()}'] = address
-            # --- БЕЗОПАСНАЯ МИГРАЦИЯ СХЕМЫ ---
+            # --- 2. НОВАЯ ТАБЛИЦА: История реферальных начислений ---
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS referral_earnings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    referrer_id INTEGER NOT NULL,     -- Кто получил вознаграждение
+                    referral_id INTEGER NOT NULL,     -- С чьей сделки
+                    order_id INTEGER NOT NULL,        -- ID сделки
+                    amount REAL NOT NULL,             -- Сумма вознаграждения в рублях
+                    created_at DATETIME,
+                    FOREIGN KEY (referrer_id) REFERENCES users (user_id),
+                    FOREIGN KEY (referral_id) REFERENCES users (user_id),
+                    FOREIGN KEY (order_id) REFERENCES orders (order_id)
+                )
+            ''')
+
+            # --- 3. НОВАЯ ТАБЛИЦА: Заявки на вывод реферальных средств ---
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    amount REAL NOT NULL,
+                    status TEXT DEFAULT 'pending',  -- pending, completed, rejected
+                    created_at DATETIME,
+                    topic_id INTEGER,
+                    FOREIGN KEY (user_id) REFERENCES users (user_id)
+                )
+            ''')
+
+            # --- 4. БЕЗОПАСНАЯ МИГРАЦИЯ СХЕМЫ ---
             
-            # 1. Проверяем таблицу 'orders' на наличие столбца 'topic_id'
-            async with db.execute("PRAGMA table_info(orders)") as cursor:
-                columns = [info[1] for info in await cursor.fetchall()]
-                
-                if 'topic_id' not in columns:
-                    logger.info("MIGRATION: 'topic_id' column not found in 'orders' table. Adding it...")
-                    await db.execute("ALTER TABLE orders ADD COLUMN topic_id INTEGER")
-                    logger.info("MIGRATION: Successfully added 'topic_id' column.")
-                
-                # Здесь можно будет добавлять другие проверки в будущем
-                # if 'another_column' not in columns:
-                #     ...
+            # Получаем информацию о столбцах в таблице 'users'
+            async with db.execute("PRAGMA table_info(users)") as cursor:
+                user_columns = [info[1] for info in await cursor.fetchall()]
+
+            # Добавляем новые столбцы, если их нет
+            migrations = {
+                'referrer_id': 'INTEGER',
+                'referral_balance': 'REAL DEFAULT 0.0',
+                'last_lottery_play': 'DATETIME',
+                'last_free_ticket': 'DATETIME'
+            }
+            
+            for column, definition in migrations.items():
+                if column not in user_columns:
+                    logger.info(f"MIGRATION: '{column}' column not found in 'users' table. Adding it...")
+                    await db.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+                    logger.info(f"MIGRATION: Successfully added '{column}' column.")
 
             await db.commit()
-            logger.info("Database initialized and schema is up to date.")
+            logger.info("Database initialized and schema is up to date for new modules.")
 
     except Exception as e:
         logger.error(f"Failed to initialize or migrate SQLite database: {e}", exc_info=True)
