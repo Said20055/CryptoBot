@@ -50,12 +50,21 @@ async def _show_main_menu(event: Message | CallbackQuery, is_new_user: bool):
                 logger.error(f"Failed to notify admin {admin_id} about new user: {e}")
 
     # Отправка фото с главным меню
-    await msg.answer_photo(
-        photo=WELCOME_PHOTO_URL,
-        text=WELCOME_TEXT,
-        reply_markup=keyboards.get_main_keyboard(),
-        parse_mode="HTML"
-    )
+    
+    try:
+        await msg.answer_photo(
+            photo=WELCOME_PHOTO_URL,
+            text=WELCOME_TEXT,
+            reply_markup=keyboards.get_main_keyboard(),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"Failed to send main menu photo: {e}")
+        await msg.answer(
+            text=WELCOME_TEXT,
+            reply_markup=keyboards.get_main_keyboard(),
+            parse_mode="HTML"
+        )
 
     # Если это callback, обязательно ответить на него, чтобы исчез "часовой индикатор"
     if isinstance(event, CallbackQuery):

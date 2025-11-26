@@ -33,6 +33,11 @@ async def admin_panel_handler(message: Message):
         reply_markup=get_admin_keyboard(),
         parse_mode="HTML"
     )
+    
+    
+    
+
+
 
 # --- Обработчики кнопок главной панели ---
 

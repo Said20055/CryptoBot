@@ -113,26 +113,19 @@ async def init_db():
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )
             ''')
-
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS lottery_plays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    prize_amount REAL NOT NULL,
+                    played_at DATETIME,
+                    FOREIGN KEY (user_id) REFERENCES users (user_id)
+                )
+            ''')
             # --- 4. БЕЗОПАСНАЯ МИГРАЦИЯ СХЕМЫ ---
             
             # Получаем информацию о столбцах в таблице 'users'
-            async with db.execute("PRAGMA table_info(users)") as cursor:
-                user_columns = [info[1] for info in await cursor.fetchall()]
-
-            # Добавляем новые столбцы, если их нет
-            migrations = {
-                'referrer_id': 'INTEGER',
-                'referral_balance': 'REAL DEFAULT 0.0',
-                'last_lottery_play': 'DATETIME',
-                'last_free_ticket': 'DATETIME'
-            }
             
-            for column, definition in migrations.items():
-                if column not in user_columns:
-                    logger.info(f"MIGRATION: '{column}' column not found in 'users' table. Adding it...")
-                    await db.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
-                    logger.info(f"MIGRATION: Successfully added '{column}' column.")
 
             await db.commit()
             logger.info("Database initialized and schema is up to date for new modules.")

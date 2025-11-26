@@ -61,16 +61,9 @@ def get_lottery_menu_text(lottery_info: dict, can_get_ticket: bool) -> str:
         time_left = next_ticket_time - datetime.now()
         formatted_time = format_timedelta(time_left)
         ticket_text = f"⏳ Следующая бесплатная игра будет доступна через: <b>{formatted_time}</b>"
+   
 
-    cooldown_text = ""
-    if last_play:
-        next_play_time = last_play + timedelta(hours=24)
-        time_left = next_play_time - datetime.now()
-        if time_left.total_seconds() > 0:
-            formatted_time = format_timedelta(time_left)
-            cooldown_text = f"\n\n(Вы уже играли сегодня. Следующая попытка через: <b>{formatted_time}</b>)"
-
-    return f"{header}{ticket_text}{cooldown_text}"
+    return f"{header}{ticket_text}"
 
 
 def get_lottery_menu_keyboard(can_play: bool) -> InlineKeyboardMarkup:
@@ -434,3 +427,14 @@ def get_referral_earnings_text(earnings: List[Tuple], balance: float) -> str:
 
     return f"{header}{body}"
 
+def get_statistics_text(stats: dict) -> str:
+    """Форматирует словарь со статистикой в красивое сообщение."""
+    return (
+        "<b>📊Статистика бота</b>\n\n"
+        "<b>👤Новые пользователи:</b>\n"
+        f"  -За 24 часа: <i>{stats.get('users_day', 0)}</i>\n"
+        f"  - За 7 дней: <i>{stats.get('users_week', 0)}</i>\n"
+        f"  - За 30 дней: <i>{stats.get('users_month', 0)}</i>\n\n"
+        "<b>Активность в лотерее:</b>\n"
+        f"  - Сыграно в 🎰 за 24 часа: <i>{stats.get('lottery_day', 0)}</i>"
+    )

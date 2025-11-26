@@ -4,7 +4,7 @@
 Модуль, содержащий все функции для выполнения запросов к базе данных.
 Функции здесь НЕ управляют соединением, а принимают готовый курсор.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 import aiosqlite
 from utils.logging_config import logger
@@ -328,11 +328,12 @@ async def grant_daily_ticket(cursor: aiosqlite.Cursor, user_id: int) -> bool:
     logger.info(f"Granted daily lottery ticket for user {user_id}.")
     return cursor.rowcount > 0
 
-async def play_lottery(cursor: aiosqlite.Cursor, user_id: int, prize_amount: float):
+async def play_lottery(cursor: aiosqlite.Cursor, user_id: int, prize_amount: float) -> bool:
     """
-    Помечает, что пользователь сыграл, обновляет время игры
-    и начисляет выигрыш на реферальный баланс.
+    Помечает, что пользователь сыграл, обновляет его данные, начисляет выигрыш
+    И ЗАПИСЫВАЕТ ИГРУ В ИСТОРИЮ.
     """
+    # 1. Обновляем данные пользователя
     await cursor.execute(
         """UPDATE users SET 
            last_lottery_play = ?,
@@ -340,7 +341,17 @@ async def play_lottery(cursor: aiosqlite.Cursor, user_id: int, prize_amount: flo
            WHERE user_id = ?""",
         (datetime.now(), prize_amount, user_id)
     )
-    logger.info(f"User {user_id} played lottery and won {prize_amount:.2f} RUB.")
+    if cursor.rowcount == 0:
+        return False # Если юзер не найден, выходим
+
+    # 2. Записываем факт игры в новую таблицу
+    await cursor.execute(
+        "INSERT INTO lottery_plays (user_id, prize_amount, played_at) VALUES (?, ?, ?)",
+        (user_id, prize_amount, datetime.now())
+    )
+    
+    logger.info(f"User {user_id} played lottery and won {prize_amount:.2f} RUB. Logged to history.")
+    return True
 
 async def get_referral_earnings_history(cursor: aiosqlite.Cursor, user_id: int, limit: int = 10) -> List[Tuple]:
     """
@@ -356,3 +367,33 @@ async def get_referral_earnings_history(cursor: aiosqlite.Cursor, user_id: int, 
         (user_id, limit)
     )
     return await cursor.fetchall()
+
+
+# --- НОВАЯ ФУНКЦИЯ: Сбор статистики для админа ---
+async def get_admin_statistics(cursor: aiosqlite.Cursor) -> dict:
+    """Собирает статистику по пользователям и лотерее за разные периоды."""
+    now = datetime.now()
+    day_ago = now - timedelta(days=1)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    # Считаем новых пользователей
+    await cursor.execute("SELECT COUNT(user_id) FROM users WHERE created_at >= ?", (day_ago,))
+    users_day = (await cursor.fetchone())[0]
+    
+    await cursor.execute("SELECT COUNT(user_id) FROM users WHERE created_at >= ?", (week_ago,))
+    users_week = (await cursor.fetchone())[0]
+
+    await cursor.execute("SELECT COUNT(user_id) FROM users WHERE created_at >= ?", (month_ago,))
+    users_month = (await cursor.fetchone())[0]
+
+    # Считаем прокрутки лотереи
+    await cursor.execute("SELECT COUNT(id) FROM lottery_plays WHERE played_at >= ?", (day_ago,))
+    lottery_day = (await cursor.fetchone())[0]
+
+    return {
+        'users_day': users_day,
+        'users_week': users_week,
+        'users_month': users_month,
+        'lottery_day': lottery_day,
+    }

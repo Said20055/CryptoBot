@@ -106,12 +106,17 @@ def get_final_actions_keyboard(order_id: int) -> InlineKeyboardMarkup:
 
 def get_admin_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(text="📊 Статистика", callback_data="admin_stats")
     builder.button(text="📢 Сделать рассылку", callback_data="admin_broadcast")
     builder.button(text="🎁 Создать промокод", callback_data="admin_create_promo")
     builder.button(text="⚙️ Управление реквизитами", callback_data="admin_settings")
     builder.adjust(1)
     return builder.as_markup()
 
+def back_to_admin_panel() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin_panel")]
+    ])
 
 def get_persistent_reply_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -123,6 +128,8 @@ def get_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel_transaction")]
     ])
+
+
 
 
 def get_profile_keyboard(balance: float, min_withdrawal: int) -> InlineKeyboardMarkup:
