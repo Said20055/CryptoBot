@@ -48,7 +48,7 @@ SBP_BANK = os.getenv("SBP_BANK")
 
 
 # Процент, который получает реферер с каждого обмена своего реферала
-REFERRAL_PERCENTAGE = 1.0
+REFERRAL_PERCENTAGE = 10.0
 
 # Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
 ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
@@ -58,7 +58,7 @@ ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
 ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
 
 # Минимальная сумма в рублях для создания заявки на вывод реферального баланса
-MIN_WITHDRAWAL_AMOUNT = 1000 # 1000 RUB
+MIN_WITHDRAWAL_AMOUNT = 300 # 1000 RUB
 
 
 # ==========================================================

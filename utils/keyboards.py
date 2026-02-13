@@ -50,8 +50,7 @@ def get_crypto_selection_keyboard(action: str) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🟡 Bitcoin (BTC)", callback_data=CryptoSelection(action=action, crypto="BTC").pack()),
-                InlineKeyboardButton(text="⚡️ Litecoin (LTC)", callback_data=CryptoSelection(action=action, crypto="LTC").pack())
+                InlineKeyboardButton(text="🟡 Bitcoin (BTC)", callback_data=CryptoSelection(action=action, crypto="BTC").pack())
             ],
             [
                 InlineKeyboardButton(text="🔷 TRON (TRX)", callback_data=CryptoSelection(action=action, crypto="TRX").pack()),
