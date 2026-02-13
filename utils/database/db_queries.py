@@ -60,11 +60,11 @@ async def get_user_profile(cursor: aiosqlite.Cursor, user_id: int) -> Optional[D
 
 # --- ORDER QUERIES ---
 
-async def create_order(
-    cursor, user_id, username, action, crypto, amount_crypto, amount_rub,
-    phone_and_bank, promo_code, topic_id, service_commission_rub=0.0,
-    network_fee_rub=0.0
-):
+async def create_order(cursor: aiosqlite.Cursor, user_id: int, username: str, action: str,
+                       crypto: str, amount_crypto: float, amount_rub: float,
+                       phone_and_bank: str, promo_code: Optional[str],
+                       topic_id: int, service_commission_rub: float = 0.0,
+                       network_fee_rub: float = 0.0) -> int:
     """Создает новую заявку, сохраняя ID темы, и возвращает ее ID."""
     await cursor.execute('''
         INSERT INTO orders (user_id, topic_id, username, action, crypto, 
