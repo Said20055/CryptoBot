@@ -57,6 +57,20 @@ ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
 ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
 ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
 
+# Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
+ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
+
+# Интервал уведомлений админов о необработанных заявках (в секундах).
+ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
+ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
+
+# Ночное окно по МСК, в которое отправляются напоминания администраторам.
+ADMIN_REMINDER_NIGHT_START_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_START_HOUR_MSK", 0))
+ADMIN_REMINDER_NIGHT_END_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_END_HOUR_MSK", 8))
+
+# Задержка приветственного сообщения после создания заявки (сек).
+ORDER_GREETING_DELAY_SECONDS = int(os.getenv("ORDER_GREETING_DELAY_SECONDS", 5))
+
 # Минимальная сумма в рублях для создания заявки на вывод реферального баланса
 MIN_WITHDRAWAL_AMOUNT = 300 # 1000 RUB
 

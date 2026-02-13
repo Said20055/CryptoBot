@@ -1,3 +1,4 @@
+import asyncio
 import aiosqlite
 
 from aiogram import F, Bot
@@ -5,7 +6,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import AiogramError
 
-from config import SUPPORT_GROUP_ID, SERVICE_COMMISSION_PERCENT, NETWORK_FEE_RUB, CRYPTO_WALLETS, SBP_PHONE, SBP_BANK
+from config import SUPPORT_GROUP_ID, SERVICE_COMMISSION_PERCENT, NETWORK_FEE_RUB, CRYPTO_WALLETS, SBP_PHONE, SBP_BANK, ORDER_GREETING_DELAY_SECONDS
 from utils.logging_config import logger
 from utils.states import TransactionStates
 from utils.callbacks import CryptoSelection, RubInputSwitch
@@ -21,6 +22,19 @@ from utils.database.db_queries import (
     update_order_status, refund_promo_if_needed
 )
 from utils.database.db_helpers import get_active_order_for_user
+
+
+async def _send_delayed_order_greeting(bot: Bot, user_id: int):
+    """Отправляет приветственное сообщение через несколько секунд после создания заявки."""
+    try:
+        await asyncio.sleep(ORDER_GREETING_DELAY_SECONDS)
+        await bot.send_message(
+            chat_id=user_id,
+            text="Приветствую, оператор будет на связи в течений 5 минут!"
+        )
+    except Exception as e:
+        logger.warning(f"Could not send delayed greeting to user {user_id}: {e}")
+
 
 
 # --- Блок навигации и выбора ---
@@ -281,6 +295,8 @@ async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int
         reply_markup=keyboards.get_final_actions_keyboard(order_id), 
         parse_mode="HTML"
     )
+
+    asyncio.create_task(_send_delayed_order_greeting(bot, user_id))
 
     await state.set_state(TransactionStates.waiting_for_operator_reply)
 

@@ -1,15 +1,16 @@
 """
-Главный модуль Telegram бота для обмена криптовалют
+Главный модуль Telegram бота для обмена криптовалют.
 """
 import asyncio
 import random
 import aiosqlite
 from aiogram import Bot, Dispatcher, F
 
-from aiogram.types import BotCommandScopeChat, BotCommand
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.state import State, StatesGroup
+import aiosqlite
+from aiogram import Bot, Dispatcher
 from aiogram.exceptions import AiogramError
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeChat
 
 from config import (
     TOKEN, ADMIN_CHAT_ID, SUPPORT_GROUP_ID, ORDER_AUTO_CLOSE_MINUTES,
@@ -108,11 +109,9 @@ async def main():
     bot = Bot(token=TOKEN)
     bot_info = await bot.get_me()
     logger.info(f"Bot started: {bot_info.first_name} @{bot_info.username}")
-    storage = MemoryStorage()
-    dp = Dispatcher(storage=storage)
-    
-    
-    # Регистрация команд для меню бота
+
+    dp = Dispatcher(storage=MemoryStorage())
+
     default_commands = [
         BotCommand(command="/start", description="Запустить бота"),
         BotCommand(command="/profile", description="Показать мой профиль"),
@@ -133,15 +132,15 @@ async def main():
         except Exception as e:
             logger.error(f"An unexpected error occurred while setting commands for {admin_id}: {e}")
 
-    # Регистрация роутеров — handlers/router.py создаёт Router'ы
     dp.include_router(router.main_router)
     dp.include_router(lottery_router)
     dp.include_router(router.crypto_router)
     dp.include_router(router.admin_router)
-    # Include proxy routers if available
     dp.include_router(router.private_message_router)
-    dp.include_router(router.group_message_router) # <-- Вот он, ключ к решению проблемы!
+    dp.include_router(router.group_message_router)
 
+    auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
+    admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
 
     auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
     admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
@@ -154,5 +153,6 @@ async def main():
         await asyncio.gather(auto_close_task, admin_reminder_task, return_exceptions=True)
         await bot.session.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
