@@ -240,7 +240,9 @@ async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int
                 cursor, user_id=user_id, topic_id=topic.message_thread_id,
                 username=from_user.username or "Нет username", action=data.get('action'),
                 crypto=data.get('crypto'), amount_crypto=data.get('amount_crypto'),
-                amount_rub=data.get('total_amount'), phone_and_bank=user_requisites, promo_code=promo_code
+                amount_rub=data.get('total_amount'), phone_and_bank=user_requisites, promo_code=promo_code,
+                service_commission_rub=data.get('service_commission_rub', 0.0),
+                network_fee_rub=data.get('network_fee_rub', 0.0)
             )
             if promo_code:
                 await clear_user_activated_promo(cursor, user_id)
@@ -351,6 +353,9 @@ async def cancel_order_handler(callback_query: CallbackQuery):
                     return
                 elif order_info['status'] == 'rejected':
                     await callback_query.answer("Заявка уже была отменена оператором.", show_alert=True)
+                    return
+                elif order_info['status'] == 'auto_closed':
+                    await callback_query.answer("Заявка уже автоматически закрыта по таймауту.", show_alert=True)
                     return
                 
                 # 2. Обновляем статус в БД
