@@ -60,24 +60,26 @@ async def get_user_profile(cursor: aiosqlite.Cursor, user_id: int) -> Optional[D
 
 # --- ORDER QUERIES ---
 
-async def create_order(cursor: aiosqlite.Cursor, user_id: int, username: str, action: str, 
-                      crypto: str, amount_crypto: float, amount_rub: float, 
-                      phone_and_bank: str, promo_code: Optional[str],
-                      topic_id: int) -> int:
+async def create_order(cursor: aiosqlite.Cursor, user_id: int, username: str, action: str,
+                       crypto: str, amount_crypto: float, amount_rub: float,
+                       phone_and_bank: str, promo_code: Optional[str],
+                       topic_id: int, service_commission_rub: float = 0.0,
+                       network_fee_rub: float = 0.0) -> int:
     """Создает новую заявку, сохраняя ID темы, и возвращает ее ID."""
     await cursor.execute('''
         INSERT INTO orders (user_id, topic_id, username, action, crypto, 
-                          amount_crypto, amount_rub, phone_and_bank, created_at, promo_code_used)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          amount_crypto, amount_rub, phone_and_bank, created_at, promo_code_used,
+                          service_commission_rub, network_fee_rub)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (user_id, topic_id, username, action, crypto, amount_crypto, amount_rub, 
-          phone_and_bank, datetime.now(), promo_code))
+          phone_and_bank, datetime.now(), promo_code, service_commission_rub, network_fee_rub))
     order_id = cursor.lastrowid
     logger.info(f"Created order #{order_id} in topic #{topic_id} for user {user_id}. Promo: {promo_code}")
     return order_id
 
 async def update_order_status(cursor: aiosqlite.Cursor, order_id: int, new_status: str) -> bool:
     """Обновляет статус указанной заявки."""
-    allowed_statuses = ['processing', 'completed', 'rejected', 'cancelled_by_user']
+    allowed_statuses = ['processing', 'completed', 'rejected', 'cancelled_by_user', 'auto_closed']
     if new_status not in allowed_statuses:
         logger.error(f"Attempted to set an invalid order status: {new_status}")
         return False
@@ -214,14 +216,49 @@ async def refund_promo_if_needed(cursor: aiosqlite.Cursor, user_id: int, order_i
 async def get_order_by_id(cursor, order_id: int):
     """Возвращает полную информацию о заявке по ее ID."""
     await cursor.execute("""
-        SELECT topic_id, status, amount_rub FROM orders WHERE order_id = ?
+        SELECT topic_id, status, amount_rub, service_commission_rub, network_fee_rub FROM orders WHERE order_id = ?
     """, (order_id,))
     result = await cursor.fetchone()
     if result:
         # Возвращаем в виде словаря для удобного доступа
         logger.info(f"Refunded promo {result}")
-        return {'topic_id': result[0], 'status': result[1], 'amount_rub': result[2]}
+        return {'topic_id': result[0], 'status': result[1], 'amount_rub': result[2], 'service_commission_rub': result[3] or 0.0, 'network_fee_rub': result[4] or 0.0}
     return None
+
+
+async def get_stale_processing_orders(cursor: aiosqlite.Cursor, older_than_minutes: int) -> List[dict]:
+    """Возвращает заявки в статусе processing, созданные раньше заданного количества минут."""
+    await cursor.execute(
+        """
+        SELECT order_id, user_id, topic_id, created_at
+        FROM orders
+        WHERE status = 'processing'
+          AND datetime(created_at) <= datetime('now', ?)
+        """,
+        (f'-{older_than_minutes} minutes',)
+    )
+    rows = await cursor.fetchall()
+    return [
+        {'order_id': row[0], 'user_id': row[1], 'topic_id': row[2], 'created_at': row[3]}
+        for row in rows
+    ]
+
+
+async def get_processing_orders(cursor: aiosqlite.Cursor) -> List[dict]:
+    """Возвращает все заявки в статусе processing для напоминаний админам."""
+    await cursor.execute(
+        """
+        SELECT order_id, user_id, created_at
+        FROM orders
+        WHERE status = 'processing'
+        ORDER BY created_at ASC
+        """
+    )
+    rows = await cursor.fetchall()
+    return [
+        {'order_id': row[0], 'user_id': row[1], 'created_at': row[2]}
+        for row in rows
+    ]
 
 async def get_all_settings(cursor) -> dict:
     """Возвращает все настройки из БД в виде словаря."""

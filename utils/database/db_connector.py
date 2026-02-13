@@ -53,6 +53,8 @@ async def init_db():
                     phone_and_bank TEXT,
                     created_at DATETIME,
                     promo_code_used TEXT DEFAULT NULL,
+                    service_commission_rub REAL DEFAULT 0.0,
+                    network_fee_rub REAL DEFAULT 0.0,
                     status TEXT DEFAULT 'processing',
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )
@@ -123,9 +125,14 @@ async def init_db():
                 )
             ''')
             # --- 4. БЕЗОПАСНАЯ МИГРАЦИЯ СХЕМЫ ---
-            
-            # Получаем информацию о столбцах в таблице 'users'
-            
+            cursor = await db.execute("PRAGMA table_info(orders)")
+            order_columns = {row[1] for row in await cursor.fetchall()}
+
+            if 'service_commission_rub' not in order_columns:
+                await db.execute("ALTER TABLE orders ADD COLUMN service_commission_rub REAL DEFAULT 0.0")
+
+            if 'network_fee_rub' not in order_columns:
+                await db.execute("ALTER TABLE orders ADD COLUMN network_fee_rub REAL DEFAULT 0.0")
 
             await db.commit()
             logger.info("Database initialized and schema is up to date for new modules.")
