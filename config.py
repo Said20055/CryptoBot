@@ -27,7 +27,6 @@ SUPPORT_GROUP_ID = int(os.getenv("SUPPORT_GROUP_ID", 0))
 # Загружаем адреса кошельков. Если переменная не найдена, используется пустая строка.
 CRYPTO_WALLETS = {
     "BTC": os.getenv("WALLET_BTC", ""),
-    "LTC": os.getenv("WALLET_LTC", ""),
     "TRX": os.getenv("WALLET_TRX", ""),
     "USDT": os.getenv("WALLET_USDT", ""),
 }
@@ -36,8 +35,8 @@ CRYPTO_WALLETS = {
 # --- Financial Settings ---
 # Загружаем числовые значения и преобразуем их в нужный тип (int, float)
 # Указываем значения по умолчанию на случай, если они не заданы в .env
-NETWORK_FEE_RUB = int(os.getenv("NETWORK_FEE_RUB", 290))
-SERVICE_COMMISSION_PERCENT = float(os.getenv("SERVICE_COMMISSION_PERCENT", 12.0))
+NETWORK_FEE_RUB = int(os.getenv("NETWORK_FEE_RUB", 300))
+SERVICE_COMMISSION_PERCENT = float(os.getenv("SERVICE_COMMISSION_PERCENT", 15.0))
 
 
 # --- SBP Payment Details ---
@@ -51,11 +50,11 @@ SBP_BANK = os.getenv("SBP_BANK")
 REFERRAL_PERCENTAGE = 10.0
 
 # Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
-ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
+ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 5))
 
 # Интервал уведомлений админов о необработанных заявках (в секундах).
-ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
-ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
+ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 30))
+ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 50))
 
 # Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
 ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))

@@ -14,7 +14,7 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="👨‍💼 Оператор", url="https://t.me/jenya2hh"),
-                InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+                InlineKeyboardButton(text="👤 Профиль и Рефералка", callback_data="profile"),
             ],
             [
                 InlineKeyboardButton(text="🎁 Промокод", callback_data="activate_promo"),

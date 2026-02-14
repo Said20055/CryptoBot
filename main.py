@@ -90,14 +90,16 @@ async def admin_orders_reminder_loop(bot: Bot):
             if processing_orders:
                 preview = ', '.join(f"#{o['order_id'] + 9999}" for o in processing_orders[:5])
                 suffix = ' ...' if len(processing_orders) > 5 else ''
-                await bot.send_message(
-                    chat_id=SUPPORT_GROUP_ID,
-                    text=(
-                        f"🔔 Напоминание: в работе <b>{len(processing_orders)}</b> заявок. "
-                        f"Проверьте, пожалуйста: {preview}{suffix}"
-                    ),
-                    parse_mode='HTML'
-                )
+                for admin_id in ADMIN_CHAT_ID:
+                    if(admin_id!=ADMIN_CHAT_ID[0]):
+                        await bot.send_message(
+                            chat_id=admin_id,
+                            text=(
+                                f"🔔 Напоминание: в работе <b>{len(processing_orders)}</b> заявок. "
+                                f"Проверьте, пожалуйста: {preview}{suffix}"
+                            ),
+                            parse_mode='HTML'
+                        )
         except Exception as e:
             logger.error(f"admin_orders_reminder_loop error: {e}", exc_info=True)
 
