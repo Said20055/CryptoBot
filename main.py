@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import aiosqlite
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import AiogramError
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat
 
@@ -23,6 +24,7 @@ from config import (
     TOKEN,
 )
 from handlers import router
+from handlers import main as main_handlers, crypto, admin  # noqa: F401 (импорт для регистрации декораторов)
 from handlers.lottery import lottery_router
 from utils.database.db_connector import DB_NAME, init_db
 from utils.database.db_queries import (
@@ -114,6 +116,8 @@ async def auto_close_orders_loop(bot: Bot):
 
         await asyncio.sleep(60)
 
+    auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
+    admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
 
 async def admin_orders_reminder_loop(bot: Bot):
     """Шлет напоминания о заявках только в ночное время по МСК."""
@@ -147,47 +151,59 @@ async def admin_orders_reminder_loop(bot: Bot):
 async def main():
     await init_db()
     bot = Bot(token=TOKEN)
-    bot_info = await bot.get_me()
-    logger.info(f"Bot started: {bot_info.first_name} @{bot_info.username}")
-
-    dp = Dispatcher(storage=MemoryStorage())
-
-    default_commands = [
-        BotCommand(command="/start", description="Запустить бота"),
-        BotCommand(command="/profile", description="Показать мой профиль"),
-        BotCommand(command="/promo", description="Активировать промокод"),
-    ]
-    admin_commands = default_commands + [
-        BotCommand(command="/admin", description="Admin panel"),
-    ]
-
-    await bot.set_my_commands(default_commands)
-    for admin_id in ADMIN_CHAT_ID:
-        try:
-            await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
-            logger.info(f"Admin commands successfully set for admin_id: {admin_id}")
-        except AiogramError as e:
-            logger.error(f"Failed to set admin commands for admin_id: {admin_id}. Error: {e}")
-            logger.warning(f"Possible reason: Admin {admin_id} has not started the bot yet.")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred while setting commands for {admin_id}: {e}")
-
-    dp.include_router(router.main_router)
-    dp.include_router(lottery_router)
-    dp.include_router(router.crypto_router)
-    dp.include_router(router.admin_router)
-    dp.include_router(router.private_message_router)
-    dp.include_router(router.group_message_router)
-
-    auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
-    admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
-
     try:
+        bot_info = await bot.get_me()
+        logger.info(f"Bot started: {bot_info.first_name} @{bot_info.username}")
+
+        dp = Dispatcher(storage=MemoryStorage())
+
+        default_commands = [
+            BotCommand(command="/start", description="Запустить бота"),
+            BotCommand(command="/profile", description="Показать мой профиль"),
+            BotCommand(command="/promo", description="Активировать промокод"),
+        ]
+        admin_commands = default_commands + [
+            BotCommand(command="/admin", description="Admin panel"),
+        ]
+
+        await bot.set_my_commands(default_commands)
+        for admin_id in ADMIN_CHAT_ID:
+            try:
+                await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
+                logger.info(f"Admin commands successfully set for admin_id: {admin_id}")
+            except AiogramError as e:
+                logger.error(f"Failed to set admin commands for admin_id: {admin_id}. Error: {e}")
+                logger.warning(f"Possible reason: Admin {admin_id} has not started the bot yet.")
+            except Exception as e:
+                logger.error(f"An unexpected error occurred while setting commands for {admin_id}: {e}")
+
+        dp.include_router(router.main_router)
+        dp.include_router(lottery_router)
+        dp.include_router(router.crypto_router)
+        dp.include_router(router.admin_router)
+        dp.include_router(router.private_message_router)
+        dp.include_router(router.group_message_router)
+
+        auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
+        admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
+
         await dp.start_polling(bot)
+    except TelegramUnauthorizedError:
+        logger.error(
+            "TelegramUnauthorizedError: invalid TELEGRAM_BOT_TOKEN. "
+            "Проверьте значение TELEGRAM_BOT_TOKEN в .env"
+        )
+        raise
     finally:
-        auto_close_task.cancel()
-        admin_reminder_task.cancel()
-        await asyncio.gather(auto_close_task, admin_reminder_task, return_exceptions=True)
+        if 'auto_close_task' in locals():
+            auto_close_task.cancel()
+        if 'admin_reminder_task' in locals():
+            admin_reminder_task.cancel()
+        if 'auto_close_task' in locals() or 'admin_reminder_task' in locals():
+            await asyncio.gather(
+                *[t for t in [locals().get('auto_close_task'), locals().get('admin_reminder_task')] if t],
+                return_exceptions=True
+            )
         await bot.session.close()
 
 
