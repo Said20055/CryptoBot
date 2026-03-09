@@ -35,7 +35,7 @@ async def confirm_order_handler(callback_query: CallbackQuery):
             async with db.cursor() as cursor:
                 # Передаем курсор в функцию
                 order_info = await get_order_by_id(cursor, order_id)
-                order_amount = order_info['amount_rub']
+                referral_base_amount = order_info['service_commission_rub'] + order_info['network_fee_rub']
                 if order_info['status'] != 'processing':
                     await callback_query.answer("Заявка уже выполнена или отменена", show_alert=True, parse_mode="HTML")
                     return
@@ -45,7 +45,7 @@ async def confirm_order_handler(callback_query: CallbackQuery):
                     cursor,
                     order_id=order_id,
                     referral_id=user_id, # ID того, кто совершил сделку
-                    order_amount=order_amount,
+                    order_amount=referral_base_amount,
                     percentage=REFERRAL_PERCENTAGE
                 )
                 await db.commit()

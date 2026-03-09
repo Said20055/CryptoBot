@@ -53,8 +53,8 @@ async def start_promo_creation_handler(call: CallbackQuery, state: FSMContext):
     """Начинает процесс создания промокода."""
     await state.set_state(PromoStates.waiting_for_promo_code)
     await call.message.edit_text(
-        "Введите данные в формате: <b>ПРОМОКОД,КОЛИЧЕСТВО</b>\n"
-        "Например: <code>FREE2025,50</code>",
+        "Введите данные в формате: <b>ПРОМОКОД,КОЛИЧЕСТВО,СКИДКА_РУБ</b>\n"
+        "Например: <code>FREE2025,50,100</code>",
         parse_mode="HTML"
     )
     await call.answer()
