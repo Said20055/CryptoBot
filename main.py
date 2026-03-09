@@ -116,6 +116,8 @@ async def auto_close_orders_loop(bot: Bot):
 
         await asyncio.sleep(60)
 
+    auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
+    admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
 
 async def admin_orders_reminder_loop(bot: Bot):
     """Шлет напоминания о заявках только в ночное время по МСК."""
