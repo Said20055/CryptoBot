@@ -18,7 +18,7 @@ from handlers.router import crypto_router as router
 # Импортируем из файлов базы данных
 from utils.database.db_connector import DB_NAME
 from utils.database.db_queries import (
-    get_order_by_id, get_all_settings, get_user_activated_promo, create_order, clear_user_activated_promo,
+    get_order_by_id, get_all_settings, get_user_activated_promo, get_promo_discount_amount, create_order, clear_user_activated_promo,
     update_order_status, refund_promo_if_needed
 )
 from utils.database.db_helpers import get_active_order_for_user
@@ -140,18 +140,30 @@ async def process_amount_input(message: Message, state: FSMContext, bot: Bot):
         else (amount * rate, amount)
     )
 
-    # проверка промо
-    promo_applied = False
+    # проверка промо и расчет скидки на комиссии
+    promo_code = None
+    promo_discount_limit_rub = 0.0
     try:
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
-                if await get_user_activated_promo(cursor, message.from_user.id):
-                    promo_applied = True
+                promo_code = await get_user_activated_promo(cursor, message.from_user.id)
+                if promo_code:
+                    promo_discount_limit_rub = await get_promo_discount_amount(cursor, promo_code)
     except Exception as e:
         logger.error(f"DB error while checking promo: {e}", exc_info=True)
 
-    service_commission_rub = 0.0 if promo_applied else amount_rub * (SERVICE_COMMISSION_PERCENT / 100)
-    network_fee_rub = 0.0 if promo_applied else NETWORK_FEE_RUB
+    base_service_commission_rub = amount_rub * (SERVICE_COMMISSION_PERCENT / 100)
+    base_network_fee_rub = NETWORK_FEE_RUB
+    total_base_commissions = base_service_commission_rub + base_network_fee_rub
+
+    promo_discount_rub = min(max(promo_discount_limit_rub, 0.0), total_base_commissions)
+    service_discount = min(base_service_commission_rub, promo_discount_rub)
+    network_discount = min(base_network_fee_rub, promo_discount_rub - service_discount)
+
+    service_commission_rub = base_service_commission_rub - service_discount
+    network_fee_rub = base_network_fee_rub - network_discount
+    promo_applied = promo_discount_rub > 0
+
     total_amount = (amount_rub - service_commission_rub - network_fee_rub) if action == "sell" else (amount_rub + service_commission_rub + network_fee_rub)
     if total_amount < 0:
         total_amount = 0
@@ -162,7 +174,9 @@ async def process_amount_input(message: Message, state: FSMContext, bot: Bot):
         total_amount=total_amount,
         service_commission_rub=service_commission_rub,
         network_fee_rub=network_fee_rub,
-        promo_applied=promo_applied
+        promo_applied=promo_applied,
+        promo_discount_rub=promo_discount_rub,
+        promo_code=promo_code
     )
 
     prompt_text = texts.get_user_requisites_prompt_text(action, crypto)
@@ -196,6 +210,7 @@ async def process_user_requisites_handler(message: Message, state: FSMContext, b
         service_commission_rub=data["service_commission_rub"],
         network_fee_rub=data["network_fee_rub"],
         promo_applied=data["promo_applied"],
+        promo_discount_rub=data.get("promo_discount_rub", 0.0),
         user_requisites=data["user_requisites"]
     )
 
@@ -249,7 +264,7 @@ async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, user_id: int
             topic = await bot.create_forum_topic(
                 chat_id=SUPPORT_GROUP_ID, name=f"Заявка от {from_user.full_name}"
             )
-            promo_code = await get_user_activated_promo(cursor, user_id) if data.get('promo_applied') else None
+            promo_code = data.get('promo_code')
             order_id = await create_order(
                 cursor, user_id=user_id, topic_id=topic.message_thread_id,
                 username=from_user.username or "Нет username", action=data.get('action'),
@@ -331,6 +346,14 @@ async def get_requisites_handler(callback_query: CallbackQuery, state: FSMContex
     await state.set_state(TransactionStates.waiting_for_user_requisites)
 
         
+
+@router.callback_query(F.data == 'upload_receipt')
+async def ask_receipt_upload_handler(callback_query: CallbackQuery, state: FSMContext):
+    """Просит пользователя отправить чек (фото/файл) по кнопке."""
+    await state.set_state(TransactionStates.waiting_for_operator_reply)
+    await callback_query.message.answer("📎 Пожалуйста, отправьте чек одним сообщением (фото или файл).")
+    await callback_query.answer()
+
 # --- Блок отмены ---
 
 @router.callback_query(F.data == 'cancel_transaction')

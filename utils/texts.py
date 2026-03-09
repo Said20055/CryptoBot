@@ -138,23 +138,22 @@ def get_rub_prompt_text(action: str, crypto: str, rate: float) -> str:
 def get_transaction_summary_text(
     action: str, crypto: str, amount_crypto: float, amount_rub: float,
     total_amount: float, service_commission_rub: float, network_fee_rub: float,
-    promo_applied: bool, user_requisites: str # <-- НОВЫЙ ПАРАМЕТР
+    promo_applied: bool, promo_discount_rub: float, user_requisites: str
 ) -> str:
-    """
-    (ИЗМЕНЕНО) Формирует текст с полным обзором транзакции, включая реквизиты пользователя.
-    """
-    commission_info = "Без комиссии ✨" if promo_applied else f"{service_commission_rub:.0f} RUB"
-    network_fee_info = "Покрывается нами" if promo_applied else f"{network_fee_rub:.0f} RUB"
-    
+    """Формирует текст с полным обзором транзакции, включая реквизиты и скидку промокода."""
+    commission_info = f"{service_commission_rub:.0f} RUB"
+    network_fee_info = f"{network_fee_rub:.0f} RUB"
+
     if action == 'buy':
         requisites_title = "Ваш кошелек для получения"
         total_line = f"<b>К оплате:</b> <code>{total_amount:.0f} RUB</code>"
-    else: # sell
+    else:  # sell
         requisites_title = "Ваши реквизиты для получения"
         total_line = f"<b>К получению:</b> <code>{total_amount:.0f} RUB</code>"
 
-    # Безопасно экранируем ввод пользователя
     safe_user_requisites = html.escape(user_requisites)
+
+    discount_line = f"<b>Скидка по промокоду:</b> -{promo_discount_rub:.0f} RUB\n" if promo_applied else ""
 
     return (
         f"<b>🔍 Пожалуйста, проверьте все данные:</b>\n\n"
@@ -164,7 +163,8 @@ def get_transaction_summary_text(
         f"<b>{requisites_title}:</b>\n"
         f"<code>{safe_user_requisites}</code>\n\n"
         f"<b>Комиссия сервиса:</b> {commission_info}\n"
-        f"<b>Комиссия сети:</b> {network_fee_info}\n\n"
+        f"<b>Комиссия сети:</b> {network_fee_info}\n"
+        f"{discount_line}\n"
         f"{total_line}\n\n"
         f"Если все верно, нажмите кнопку ниже."
     )

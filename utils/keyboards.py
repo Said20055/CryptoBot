@@ -99,7 +99,9 @@ def get_final_confirmation_keyboard() -> InlineKeyboardMarkup:
 
 def get_final_actions_keyboard(order_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(text="📎 Загрузить чек", callback_data="upload_receipt")
     builder.button(text="❌ Отменить заявку", callback_data=f"cancel_order_{order_id}")
+    builder.adjust(1)
     return builder.as_markup()
 
 

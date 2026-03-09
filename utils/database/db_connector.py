@@ -66,6 +66,7 @@ async def init_db():
                     code TEXT UNIQUE NOT NULL,
                     total_uses INTEGER NOT NULL,
                     uses_left INTEGER NOT NULL,
+                    discount_amount_rub REAL DEFAULT 0.0,
                     is_active INTEGER DEFAULT 1,
                     created_at DATETIME
                 )
@@ -133,6 +134,11 @@ async def init_db():
 
             if 'network_fee_rub' not in order_columns:
                 await db.execute("ALTER TABLE orders ADD COLUMN network_fee_rub REAL DEFAULT 0.0")
+
+            promo_cursor = await db.execute("PRAGMA table_info(promo_codes)")
+            promo_columns = {row[1] for row in await promo_cursor.fetchall()}
+            if 'discount_amount_rub' not in promo_columns:
+                await db.execute("ALTER TABLE promo_codes ADD COLUMN discount_amount_rub REAL DEFAULT 0.0")
 
             await db.commit()
             logger.info("Database initialized and schema is up to date for new modules.")

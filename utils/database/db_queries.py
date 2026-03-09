@@ -84,10 +84,16 @@ async def update_order_status(cursor: aiosqlite.Cursor, order_id: int, new_statu
         logger.error(f"Attempted to set an invalid order status: {new_status}")
         return False
         
-    await cursor.execute(
-        "UPDATE orders SET status = ? WHERE order_id = ?",
-        (new_status, order_id)
-    )
+    if new_status == 'processing':
+        await cursor.execute(
+            "UPDATE orders SET status = ? WHERE order_id = ?",
+            (new_status, order_id)
+        )
+    else:
+        await cursor.execute(
+            "UPDATE orders SET status = ? WHERE order_id = ? AND status = 'processing'",
+            (new_status, order_id)
+        )
     return cursor.rowcount > 0
 
 async def get_order_status(cursor: aiosqlite.Cursor, order_id: int) -> Optional[str]:
@@ -134,12 +140,13 @@ async def get_order_by_topic_id(cursor: aiosqlite.Cursor, topic_id: int) -> Opti
     return None
 # --- PROMO CODE QUERIES ---
 
-async def add_promo_code(cursor: aiosqlite.Cursor, code: str, total_uses: int) -> bool:
-    """Добавляет новый промокод."""
+async def add_promo_code(cursor: aiosqlite.Cursor, code: str, total_uses: int, discount_amount_rub: float) -> bool:
+    """Добавляет новый промокод со скидкой на комиссии в рублях."""
     try:
         await cursor.execute(
-            "INSERT INTO promo_codes (code, total_uses, uses_left, created_at) VALUES (?, ?, ?, ?)",
-            (code.upper(), total_uses, total_uses, datetime.now())
+            """INSERT INTO promo_codes (code, total_uses, uses_left, discount_amount_rub, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (code.upper(), total_uses, total_uses, discount_amount_rub, datetime.now())
         )
         return True
     except aiosqlite.IntegrityError:
@@ -157,7 +164,7 @@ async def activate_promo_for_user(cursor: aiosqlite.Cursor, user_id: int, code: 
     if result and result[0]:
         return "already_active"
 
-    await cursor.execute("SELECT uses_left, is_active FROM promo_codes WHERE code = ?", (code,))
+    await cursor.execute("SELECT uses_left, is_active, discount_amount_rub FROM promo_codes WHERE code = ?", (code,))
     promo = await cursor.fetchone()
     if not promo or not promo[1] or promo[0] < 1:
         return "invalid_or_expired"
@@ -174,6 +181,16 @@ async def get_user_activated_promo(cursor: aiosqlite.Cursor, user_id: int) -> Op
 async def clear_user_activated_promo(cursor: aiosqlite.Cursor, user_id: int):
     """Очищает активный промокод пользователя."""
     await cursor.execute("UPDATE users SET activated_promo = NULL WHERE user_id = ?", (user_id,))
+
+
+async def get_promo_discount_amount(cursor: aiosqlite.Cursor, promo_code: str) -> float:
+    """Возвращает размер скидки промокода в рублях (на комиссии)."""
+    await cursor.execute(
+        "SELECT discount_amount_rub FROM promo_codes WHERE code = ? AND is_active = 1",
+        (promo_code.upper(),)
+    )
+    row = await cursor.fetchone()
+    return float(row[0]) if row and row[0] else 0.0
 
 async def use_activated_promo(cursor: aiosqlite.Cursor, user_id: int, order_id: int) -> bool:
     """'Сжигает' промокод, привязанный к заявке."""
