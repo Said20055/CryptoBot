@@ -18,7 +18,7 @@ from config import ADMIN_CHAT_ID, MIN_WITHDRAWAL_AMOUNT, REFERRAL_PERCENTAGE, SU
 from utils import texts
 from utils.logging_config import logger
 from utils.database.db_connector import DB_NAME
-from utils.database.db_queries import activate_promo_for_user, create_withdrawal_request, get_referral_earnings_history, get_user_profile, get_user_referral_info, save_or_update_user
+from utils.database.db_queries import activate_promo_for_user, create_withdrawal_request, get_promo_discount_amount, get_referral_earnings_history, get_user_profile, get_user_referral_info, save_or_update_user
 from utils.texts import WELCOME_PHOTO_URL, WELCOME_TEXT, format_user_display_name, get_profile_text
 from utils import keyboards
 from utils.states import ReferralStates, UserPromoStates
@@ -206,6 +206,7 @@ async def process_user_promo_code(message: Message, state: FSMContext):
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
                 result = await activate_promo_for_user(cursor, message.from_user.id, code)
+                discount_amount = await get_promo_discount_amount(cursor, code) if result == "success" else 0.0
                 await db.commit()
     except Exception as e:
         logger.error(f"DB error during promo activation for user {message.from_user.id}: {e}", exc_info=True)
@@ -214,7 +215,7 @@ async def process_user_promo_code(message: Message, state: FSMContext):
         return
 
     if result == "success":
-        await message.answer("✅ Промокод успешно активирован! Ваш следующий обмен будет без комиссии.")
+        await message.answer(f"✅ Промокод успешно активирован! Скидка на комиссии до <b>{discount_amount:.0f} RUB</b> на следующий обмен.", parse_mode="HTML")
     elif result == "invalid_or_expired":
         await message.answer("❌ Такого промокода не существует, он неактивен, или у него закончились использования.")
     elif result == "already_active":

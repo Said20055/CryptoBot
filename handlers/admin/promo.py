@@ -17,22 +17,27 @@ promo_router.message.filter(AdminFilter()) # Защищаем FSM-хендлер
 async def process_new_promo_code(message: Message, state: FSMContext):
     """Обрабатывает ввод, парсит и сохраняет новый промокод."""
     parts = [p.strip() for p in message.text.split(',')]
-    if len(parts) != 2:
-        await message.answer("❌ Неверный формат. Введите: <b>ПРОМОКОД,КОЛИЧЕСТВО</b>", parse_mode="HTML")
+    if len(parts) != 3:
+        await message.answer(
+            "❌ Неверный формат. Введите: <b>ПРОМОКОД,КОЛИЧЕСТВО,СКИДКА_НА_КОМИССИИ_РУБ</b>",
+            parse_mode="HTML"
+        )
         return
 
-    code, uses_str = parts
+    code, uses_str, discount_str = parts
     try:
         uses = int(uses_str)
-        if uses <= 0 or not code: raise ValueError
+        discount_amount_rub = float(discount_str.replace(',', '.'))
+        if uses <= 0 or discount_amount_rub <= 0 or not code:
+            raise ValueError
     except ValueError:
-        await message.answer("❌ Промокод не может быть пустым, а количество - положительным числом.")
+        await message.answer("❌ Промокод не может быть пустым, а количество и скидка должны быть положительными числами.")
         return
 
     try:
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.cursor() as cursor:
-                success = await add_promo_code(cursor, code.upper(), uses)
+                success = await add_promo_code(cursor, code.upper(), uses, discount_amount_rub)
                 await db.commit()
     except Exception as e:
         logging.error(f"DB error while creating promo code '{code}': {e}", exc_info=True)
@@ -41,7 +46,7 @@ async def process_new_promo_code(message: Message, state: FSMContext):
         return
 
     if success:
-        await message.answer(f"✅ Промокод <code>{code.upper()}</code> на <b>{uses}</b> использований создан.", parse_mode="HTML")
+        await message.answer(f"✅ Промокод <code>{code.upper()}</code> на <b>{uses}</b> использований и скидку <b>{discount_amount_rub:.0f} RUB</b> создан.", parse_mode="HTML")
     else:
         await message.answer(f"❌ Не удалось создать промокод <code>{code.upper()}</code>. Возможно, он уже существует.", parse_mode="HTML")
     
