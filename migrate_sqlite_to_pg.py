@@ -90,6 +90,21 @@ def col(row: sqlite3.Row, name: str, default: Any = None) -> Any:
         return default
 
 
+# NUMERIC(12, 2) допускает максимум 9 999 999 999.99
+_NUMERIC_12_2_MAX = 9_999_999_999.99
+
+def clamp_numeric(value: Any, field: str = "", row_id: Any = "") -> float:
+    """Обрезает значение до допустимого диапазона NUMERIC(12,2)."""
+    v = safe_float(value)
+    if abs(v) > _NUMERIC_12_2_MAX:
+        log.warning(
+            "  Overflow: %s=%s для id=%s — обрезано до %s",
+            field, v, row_id, _NUMERIC_12_2_MAX if v > 0 else -_NUMERIC_12_2_MAX,
+        )
+        return _NUMERIC_12_2_MAX if v > 0 else -_NUMERIC_12_2_MAX
+    return v
+
+
 # ---------------------------------------------------------------------------
 # Migration steps
 # ---------------------------------------------------------------------------
@@ -188,13 +203,13 @@ async def migrate_orders(sqlite_cur: sqlite3.Cursor, pg: asyncpg.Connection) -> 
                 col(row, "username"),
                 action,
                 col(row, "crypto") or "BTC",
-                safe_float(col(row, "amount_crypto")),
-                safe_float(col(row, "amount_rub")),
+                clamp_numeric(col(row, "amount_crypto"), "amount_crypto", old_id),
+                clamp_numeric(col(row, "amount_rub"), "amount_rub", old_id),
                 col(row, "phone_and_bank") or col(row, "requisites") or "",
                 parse_dt(col(row, "created_at")) or datetime.now(),
                 col(row, "promo_code_used"),
-                safe_float(col(row, "service_commission_rub")),
-                safe_float(col(row, "network_fee_rub")),
+                clamp_numeric(col(row, "service_commission_rub"), "service_commission_rub", old_id),
+                clamp_numeric(col(row, "network_fee_rub"), "network_fee_rub", old_id),
                 status,
             )
 
@@ -334,7 +349,7 @@ async def migrate_referral_earnings(sqlite_cur: sqlite3.Cursor, pg: asyncpg.Conn
                 VALUES ($1,$2,$3,$4,$5)
                 ON CONFLICT DO NOTHING
                 """,
-                referrer_id, referral_id, new_oid, amount,
+                referrer_id, referral_id, new_oid, clamp_numeric(amount, "amount", old_oid),
                 parse_dt(col(row, "created_at")) or datetime.now(),
             )
             if result == "INSERT 0 1":
@@ -375,7 +390,7 @@ async def migrate_withdrawal_requests(sqlite_cur: sqlite3.Cursor, pg: asyncpg.Co
                 VALUES ($1,$2,$3,$4,$5)
                 ON CONFLICT DO NOTHING
                 """,
-                user_id, amount, status, created_at, topic_id,
+                user_id, clamp_numeric(amount, "amount", user_id), status, created_at, topic_id,
             )
             if result == "INSERT 0 1":
                 inserted += 1

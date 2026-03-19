@@ -44,12 +44,15 @@ async def lottery_menu_handler(callback: CallbackQuery):
         text = texts.get_lottery_menu_text(lottery_info, can_get_new_ticket)
         keyboard = keyboards.get_lottery_menu_keyboard(can_get_new_ticket and can_play)
 
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    except Exception as e:
-        logger.error(f"DB error in lottery_menu_handler for user {user_id}: {e}", exc_info=True)
-        await callback.answer("Ошибка при загрузке данных лотереи!", show_alert=True)
-    finally:
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        except AiogramError:
+            pass  # message not modified или слишком старое — не критично
+
         await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in lottery_menu_handler for user {user_id}: {e}", exc_info=True)
+        await callback.answer("Ошибка при загрузке данных лотереи!", show_alert=True)
 
 
 @router.callback_query(F.data == "lottery_play")
@@ -74,6 +77,8 @@ async def lottery_play_handler(callback: CallbackQuery):
             prize_amount = calculate_lottery_win(LOTTERY_PRIZES)
             await play_lottery(conn, user_id, prize_amount)
 
+        await callback.answer()
+
         try:
             dice_msg = await callback.bot.send_dice(chat_id=user_id, emoji="🎰")
             await asyncio.sleep(3.5)
@@ -86,7 +91,5 @@ async def lottery_play_handler(callback: CallbackQuery):
 
         await lottery_menu_handler(callback)
     except Exception as e:
-        logger.error(f"DB error in lottery_play_handler for user {user_id}: {e}", exc_info=True)
+        logger.error(f"Error in lottery_play_handler for user {user_id}: {e}", exc_info=True)
         await callback.answer("Произошла ошибка во время игры!", show_alert=True)
-    finally:
-        await callback.answer()
