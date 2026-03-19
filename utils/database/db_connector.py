@@ -1,148 +1,21 @@
 # utils/database/db_connector.py
 
 """
-Модуль для инициализации базы данных и управления схемой.
-Включает безопасные миграции для обновления структуры таблиц в продакшене.
+Инициализация БД: запускает Alembic-миграции при старте бота.
+Логика схемы вынесена в migrations/versions/.
 """
-import aiosqlite
-from config import CRYPTO_WALLETS, SBP_BANK, SBP_PHONE
+
+from alembic.config import Config
+from alembic import command
 from utils.logging_config import logger
 
-DB_NAME = 'artbot.db'
 
-async def init_db():
-    """
-    Инициализирует базу данных, создает все необходимые таблицы и БЕЗОПАСНО
-    обновляет их структуру, если это необходимо. Вызывается один раз при старте бота.
-    """
+def run_migrations() -> None:
+    """Синхронно выполняет все pending Alembic-миграции (вызывается из on_startup)."""
     try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            # --- Создаем таблицы, если они не существуют (это всегда безопасно) ---
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    full_name TEXT,
-                    email TEXT,
-                    is_subscribed INTEGER DEFAULT 0,
-                    subscription_end DATETIME,
-                    created_at DATETIME,
-                    referrer_id INTEGER,              
-                    referral_balance REAL DEFAULT 0.0,  
-                    
-                    -- Система лотереи
-                    last_lottery_play DATETIME,    
-                    last_free_ticket DATETIME ,       
-                    
-                    invite_link_issued INTEGER DEFAULT 0,
-                    subscription_duration INTEGER DEFAULT 0,
-                    activated_promo TEXT DEFAULT NULL
-                )
-            ''')
-
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS orders (
-                    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    topic_id INTEGER,
-                    username TEXT,
-                    action TEXT,
-                    crypto TEXT,
-                    amount_crypto REAL,
-                    amount_rub REAL,
-                    phone_and_bank TEXT,
-                    created_at DATETIME,
-                    promo_code_used TEXT DEFAULT NULL,
-                    service_commission_rub REAL DEFAULT 0.0,
-                    network_fee_rub REAL DEFAULT 0.0,
-                    status TEXT DEFAULT 'processing',
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS promo_codes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    code TEXT UNIQUE NOT NULL,
-                    total_uses INTEGER NOT NULL,
-                    uses_left INTEGER NOT NULL,
-                    discount_amount_rub REAL DEFAULT 0.0,
-                    is_active INTEGER DEFAULT 1,
-                    created_at DATETIME
-                )
-            ''')
-
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS used_promo_codes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    promo_code TEXT NOT NULL,
-                    order_id INTEGER NOT NULL,
-                    used_at DATETIME,
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                )
-            """)
-            
-            # --- 2. НОВАЯ ТАБЛИЦА: История реферальных начислений ---
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS referral_earnings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    referrer_id INTEGER NOT NULL,     -- Кто получил вознаграждение
-                    referral_id INTEGER NOT NULL,     -- С чьей сделки
-                    order_id INTEGER NOT NULL,        -- ID сделки
-                    amount REAL NOT NULL,             -- Сумма вознаграждения в рублях
-                    created_at DATETIME,
-                    FOREIGN KEY (referrer_id) REFERENCES users (user_id),
-                    FOREIGN KEY (referral_id) REFERENCES users (user_id),
-                    FOREIGN KEY (order_id) REFERENCES orders (order_id)
-                )
-            ''')
-
-            # --- 3. НОВАЯ ТАБЛИЦА: Заявки на вывод реферальных средств ---
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS withdrawal_requests (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    amount REAL NOT NULL,
-                    status TEXT DEFAULT 'pending',  -- pending, completed, rejected
-                    created_at DATETIME,
-                    topic_id INTEGER,
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS lottery_plays (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    prize_amount REAL NOT NULL,
-                    played_at DATETIME,
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-            # --- 4. БЕЗОПАСНАЯ МИГРАЦИЯ СХЕМЫ ---
-            cursor = await db.execute("PRAGMA table_info(orders)")
-            order_columns = {row[1] for row in await cursor.fetchall()}
-
-            if 'service_commission_rub' not in order_columns:
-                await db.execute("ALTER TABLE orders ADD COLUMN service_commission_rub REAL DEFAULT 0.0")
-
-            if 'network_fee_rub' not in order_columns:
-                await db.execute("ALTER TABLE orders ADD COLUMN network_fee_rub REAL DEFAULT 0.0")
-
-            promo_cursor = await db.execute("PRAGMA table_info(promo_codes)")
-            promo_columns = {row[1] for row in await promo_cursor.fetchall()}
-            if 'discount_amount_rub' not in promo_columns:
-                await db.execute("ALTER TABLE promo_codes ADD COLUMN discount_amount_rub REAL DEFAULT 0.0")
-
-            await db.commit()
-            logger.info("Database initialized and schema is up to date for new modules.")
-
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Database migrations applied successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialize or migrate SQLite database: {e}", exc_info=True)
+        logger.error(f"Failed to run database migrations: {e}", exc_info=True)
         raise

@@ -28,6 +28,7 @@ credentials.json
 .vscode/
 *.swp
 *.swo
+.mcp.json
 
 # Дистрибутивы и сборки
 /dist/

@@ -1,6 +1,6 @@
 from loguru import logger
+import sys
 
-
-#logger.remove()  # Удаляем дефолтный хэндлер
-logger.add("logging.log", rotation="10 MB", format="{time} | {level} | {module}:{function}:{line} - {message}")
-#    logger.add(lambda msg: print(msg, end=""), format="{time} | {level} | {module}:{function}:{line} - {message}") """
+logger.remove()
+logger.add(sys.stderr, level="INFO", format="{time:HH:mm:ss} | {level} | {module}:{line} - {message}")
+logger.add("logging.log", level="DEBUG", rotation="10 MB", format="{time} | {level} | {module}:{function}:{line} - {message}")

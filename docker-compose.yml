@@ -1,20 +1,35 @@
-# docker-compose.dev.yml
-
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cryptobot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cryptobot
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bot -d cryptobot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   cryptobot:
-    # Собираем образ из Dockerfile в текущей директории
     build: .
     container_name: cryptobot-dev
     restart: unless-stopped
-    
-    # Ключевая часть для разработки: монтируем текущую папку внутрь контейнера.
-    # Любое изменение в .py файлах на вашем компьютере сразу же отразится
-    # внутри контейнера. Для применения изменений достаточно перезапустить контейнер.
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - .:/usr/src/app
-      
-    # Файл с переменными окружения (токенами)
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://bot:${POSTGRES_PASSWORD}@postgres:5432/cryptobot
+
+volumes:
+  pgdata:

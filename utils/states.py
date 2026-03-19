@@ -7,9 +7,6 @@
 
 from aiogram.fsm.state import State, StatesGroup
 
-class UserPromoStates(StatesGroup):
-    waiting_for_code = State()
-
 class PromoStates(StatesGroup):
     waiting_for_promo_code = State()
 
@@ -26,3 +23,7 @@ class BroadcastStates(StatesGroup):
 
 class ReferralStates(StatesGroup):
     waiting_for_withdrawal_details = State()
+
+class AdminPromoStates(StatesGroup):
+    waiting_for_promo_data = State()         # ввод CODE,USES,AMOUNT
+    waiting_for_discount_type = State()      # выбор типа скидки кнопкой

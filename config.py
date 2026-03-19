@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения из файла .env
 load_dotenv()
 
+# --- Database ---
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://bot:secret@localhost:5432/cryptobot")
+
 # --- Telegram Bot Settings ---
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -50,13 +53,6 @@ SBP_BANK = os.getenv("SBP_BANK")
 REFERRAL_PERCENTAGE = 10.0
 
 # Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
-ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 5))
-
-# Интервал уведомлений админов о необработанных заявках (в секундах).
-ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 30))
-ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 50))
-
-# Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
 ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
 
 # Интервал уведомлений админов о необработанных заявках (в секундах).
@@ -70,33 +66,8 @@ ADMIN_REMINDER_NIGHT_END_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_END_HOUR
 # Задержка приветственного сообщения после создания заявки (сек).
 ORDER_GREETING_DELAY_SECONDS = int(os.getenv("ORDER_GREETING_DELAY_SECONDS", 5))
 
-# Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
-ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
-
-# Интервал уведомлений админов о необработанных заявках (в секундах).
-ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
-ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
-
-# Ночное окно по МСК, в которое отправляются напоминания администраторам.
-ADMIN_REMINDER_NIGHT_START_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_START_HOUR_MSK", 0))
-ADMIN_REMINDER_NIGHT_END_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_END_HOUR_MSK", 8))
-
-# Задержка приветственного сообщения после создания заявки (сек).
-ORDER_GREETING_DELAY_SECONDS = int(os.getenv("ORDER_GREETING_DELAY_SECONDS", 5))
-
-# Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
-ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
-
-# Интервал уведомлений админов о необработанных заявках (в секундах).
-ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
-ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
-
-# Ночное окно по МСК, в которое отправляются напоминания администраторам.
-ADMIN_REMINDER_NIGHT_START_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_START_HOUR_MSK", 0))
-ADMIN_REMINDER_NIGHT_END_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_END_HOUR_MSK", 8))
-
-# Задержка приветственного сообщения после создания заявки (сек).
-ORDER_GREETING_DELAY_SECONDS = int(os.getenv("ORDER_GREETING_DELAY_SECONDS", 5))
+# Смещение для отображаемого номера заявки (order_id + ORDER_NUMBER_OFFSET)
+ORDER_NUMBER_OFFSET = 9999
 
 # Минимальная сумма в рублях для создания заявки на вывод реферального баланса
 MIN_WITHDRAWAL_AMOUNT = 300 # 1000 RUB

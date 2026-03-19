@@ -1,5 +1,7 @@
 aiogram==3.13.1
-aiosqlite
+asyncpg==0.29.0
+alembic==1.13.0
+sqlalchemy[asyncio]==2.0.36
 requests==2.32.3
 aiohttp==3.10.5
 loguru
@@ -8,3 +10,4 @@ pytz
 python-dotenv
 pandas
 openpyxl
+cachetools

@@ -1,15 +1,15 @@
 """
-Главный модуль Telegram бота для обмена криптовалют.
+Точка входа: инициализация БД, регистрация роутера, запуск поллинга
+и фоновые задачи (автозакрытие заявок, ночные напоминания).
 """
+
 import asyncio
 import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-import aiosqlite
 from aiogram import Bot, Dispatcher
-from aiogram.exceptions import AiogramError
-from aiogram.exceptions import TelegramUnauthorizedError
+from aiogram.exceptions import AiogramError, TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat
 
@@ -20,124 +20,119 @@ from config import (
     ADMIN_REMINDER_NIGHT_END_HOUR_MSK,
     ADMIN_REMINDER_NIGHT_START_HOUR_MSK,
     ORDER_AUTO_CLOSE_MINUTES,
+    ORDER_NUMBER_OFFSET,
     SUPPORT_GROUP_ID,
     TOKEN,
+    DATABASE_URL,
 )
 from handlers import router
-from handlers import main as main_handlers, crypto, admin  # noqa: F401 (импорт для регистрации декораторов)
-from handlers.lottery import lottery_router
-from utils.database.db_connector import DB_NAME, init_db
+from utils.database.connection import init_pool, close_pool
+from utils.database.db_connector import run_migrations
+from utils.database.db_helpers import acquire, transaction
 from utils.database.db_queries import (
+    get_orders_needing_warning,
     get_processing_orders,
     get_stale_processing_orders,
+    mark_order_warned,
     update_order_status,
 )
 from utils.logging_config import logger
+from middlewares.throttling import ThrottlingMiddleware
+from middlewares.logging import LoggingMiddleware
 
 MSK_TZ = ZoneInfo("Europe/Moscow")
 
 
-def is_msk_night_now() -> bool:
-    """Возвращает True, если текущее московское время попадает в ночное окно напоминаний."""
+def _is_msk_night_now() -> bool:
     now_hour = datetime.now(MSK_TZ).hour
     start = ADMIN_REMINDER_NIGHT_START_HOUR_MSK
     end = ADMIN_REMINDER_NIGHT_END_HOUR_MSK
-
     if start == end:
         return True
-
     if start < end:
         return start <= now_hour < end
-
-    # Окно через полночь, например 22:00-08:00
     return now_hour >= start or now_hour < end
 
 
-def seconds_until_next_msk_night_start() -> int:
-    """Считает, через сколько секунд начнется следующее ночное окно в МСК."""
+def _seconds_until_next_msk_night_start() -> int:
     now = datetime.now(MSK_TZ)
-    target = now.replace(
-        hour=ADMIN_REMINDER_NIGHT_START_HOUR_MSK,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
+    target = now.replace(hour=ADMIN_REMINDER_NIGHT_START_HOUR_MSK, minute=0, second=0, microsecond=0)
     if now >= target:
         target += timedelta(days=1)
     return max(60, int((target - now).total_seconds()))
 
 
 async def auto_close_orders_loop(bot: Bot):
-    """Периодически автозакрывает заявки старше ORDER_AUTO_CLOSE_MINUTES."""
+    """Периодически предупреждает и автозакрывает заявки старше ORDER_AUTO_CLOSE_MINUTES."""
     while True:
         try:
-            async with aiosqlite.connect(DB_NAME) as db:
-                async with db.cursor() as cursor:
-                    stale_orders = await get_stale_processing_orders(cursor, ORDER_AUTO_CLOSE_MINUTES)
-                    for order in stale_orders:
-                        changed = await update_order_status(cursor, order["order_id"], "auto_closed")
-                        if not changed:
-                            continue
+            async with transaction() as conn:
+                for order in await get_orders_needing_warning(conn, ORDER_AUTO_CLOSE_MINUTES, warn_before_minutes=5):
+                    order_number = order["order_id"] + ORDER_NUMBER_OFFSET
+                    try:
+                        await bot.send_message(
+                            chat_id=order["user_id"],
+                            text=(
+                                f"⏳ Ваша заявка <b>#{order_number}</b> будет автоматически отменена "
+                                f"через 5 минут, если оператор её не обработает. "
+                                f"Свяжитесь с оператором, если нужна помощь."
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not send warning to user {order['user_id']}: {e}")
+                    await mark_order_warned(conn, order["order_id"])
 
-                        order_number = order["order_id"] + 9999
-                        user_id = order["user_id"]
-                        topic_id = order["topic_id"]
-
+            async with transaction() as conn:
+                for order in await get_stale_processing_orders(conn, ORDER_AUTO_CLOSE_MINUTES):
+                    if not await update_order_status(conn, order["order_id"], "auto_closed"):
+                        continue
+                    order_number = order["order_id"] + ORDER_NUMBER_OFFSET
+                    try:
+                        await bot.send_message(
+                            chat_id=order["user_id"],
+                            text=(
+                                f"⏱ Заявка <b>#{order_number}</b> автоматически закрыта, "
+                                f"так как не была обработана в течение {ORDER_AUTO_CLOSE_MINUTES} минут."
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not notify user {order['user_id']} about auto close: {e}")
+                    if order.get("topic_id"):
                         try:
                             await bot.send_message(
-                                chat_id=user_id,
-                                text=(
-                                    f"⏱ Заявка <b>#{order_number}</b> автоматически закрыта, "
-                                    f"так как не была обработана в течение {ORDER_AUTO_CLOSE_MINUTES} минут."
-                                ),
+                                chat_id=SUPPORT_GROUP_ID,
+                                message_thread_id=order["topic_id"],
+                                text=f"⏱ <b>Заявка #{order_number} автоматически закрыта</b> (превышено время ожидания {ORDER_AUTO_CLOSE_MINUTES} мин).",
                                 parse_mode="HTML",
                             )
                         except Exception as e:
-                            logger.warning(f"Could not notify user {user_id} about auto close: {e}")
-
-                        if topic_id:
-                            try:
-                                await bot.send_message(
-                                    chat_id=SUPPORT_GROUP_ID,
-                                    message_thread_id=topic_id,
-                                    text=(
-                                        f"⏱ <b>Заявка #{order_number} автоматически закрыта</b> "
-                                        f"(превышено время ожидания {ORDER_AUTO_CLOSE_MINUTES} мин)."
-                                    ),
-                                    parse_mode="HTML",
-                                )
-                            except Exception as e:
-                                logger.warning(f"Could not notify topic {topic_id} about auto close: {e}")
-
-                    if stale_orders:
-                        await db.commit()
+                            logger.warning(f"Could not notify topic {order['topic_id']} about auto close: {e}")
         except Exception as e:
             logger.error(f"auto_close_orders_loop error: {e}", exc_info=True)
 
         await asyncio.sleep(60)
 
-    auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
-    admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
 
 async def admin_orders_reminder_loop(bot: Bot):
-    """Шлет напоминания о заявках только в ночное время по МСК."""
+    """Шлёт напоминания о заявках только в ночное время по МСК."""
     while True:
         try:
-            if not is_msk_night_now():
-                await asyncio.sleep(seconds_until_next_msk_night_start())
+            if not _is_msk_night_now():
+                await asyncio.sleep(_seconds_until_next_msk_night_start())
                 continue
 
-            async with aiosqlite.connect(DB_NAME) as db:
-                async with db.cursor() as cursor:
-                    processing_orders = await get_processing_orders(cursor)
+            async with acquire() as conn:
+                processing = await get_processing_orders(conn)
 
-            if processing_orders:
-                preview = ", ".join(f"#{o['order_id'] + 9999}" for o in processing_orders[:5])
-                suffix = " ..." if len(processing_orders) > 5 else ""
+            if processing:
+                preview = ", ".join(f"#{o['order_id'] + ORDER_NUMBER_OFFSET}" for o in processing[:5])
+                suffix = " ..." if len(processing) > 5 else ""
                 await bot.send_message(
                     chat_id=SUPPORT_GROUP_ID,
                     text=(
-                        f"🌙🔔 Ночное напоминание: в работе <b>{len(processing_orders)}</b> заявок. "
+                        f"🌙🔔 Ночное напоминание: в работе <b>{len(processing)}</b> заявок. "
                         f"Проверьте, пожалуйста: {preview}{suffix}"
                     ),
                     parse_mode="HTML",
@@ -149,63 +144,55 @@ async def admin_orders_reminder_loop(bot: Bot):
 
 
 async def main():
-    await init_db()
+    await init_pool(DATABASE_URL)
+
     bot = Bot(token=TOKEN)
+    auto_close_task = None
+    admin_reminder_task = None
+
     try:
         bot_info = await bot.get_me()
         logger.info(f"Bot started: {bot_info.first_name} @{bot_info.username}")
 
         dp = Dispatcher(storage=MemoryStorage())
+        dp.message.middleware(ThrottlingMiddleware(rate=1.0))
+        dp.message.middleware(LoggingMiddleware())
+        dp.callback_query.middleware(LoggingMiddleware())
 
         default_commands = [
             BotCommand(command="/start", description="Запустить бота"),
             BotCommand(command="/profile", description="Показать мой профиль"),
             BotCommand(command="/promo", description="Активировать промокод"),
         ]
-        admin_commands = default_commands + [
-            BotCommand(command="/admin", description="Admin panel"),
-        ]
+        admin_commands = default_commands + [BotCommand(command="/admin", description="Admin panel")]
 
         await bot.set_my_commands(default_commands)
         for admin_id in ADMIN_CHAT_ID:
             try:
                 await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
-                logger.info(f"Admin commands successfully set for admin_id: {admin_id}")
             except AiogramError as e:
-                logger.error(f"Failed to set admin commands for admin_id: {admin_id}. Error: {e}")
-                logger.warning(f"Possible reason: Admin {admin_id} has not started the bot yet.")
-            except Exception as e:
-                logger.error(f"An unexpected error occurred while setting commands for {admin_id}: {e}")
+                logger.error(f"Failed to set admin commands for {admin_id}: {e}")
 
-        dp.include_router(router.main_router)
-        dp.include_router(lottery_router)
-        dp.include_router(router.crypto_router)
-        dp.include_router(router.admin_router)
-        dp.include_router(router.private_message_router)
-        dp.include_router(router.group_message_router)
+        dp.include_router(router)
 
         auto_close_task = asyncio.create_task(auto_close_orders_loop(bot))
         admin_reminder_task = asyncio.create_task(admin_orders_reminder_loop(bot))
 
         await dp.start_polling(bot)
     except TelegramUnauthorizedError:
-        logger.error(
-            "TelegramUnauthorizedError: invalid TELEGRAM_BOT_TOKEN. "
-            "Проверьте значение TELEGRAM_BOT_TOKEN в .env"
-        )
+        logger.error("TelegramUnauthorizedError: invalid TELEGRAM_BOT_TOKEN.")
         raise
     finally:
-        if 'auto_close_task' in locals():
-            auto_close_task.cancel()
-        if 'admin_reminder_task' in locals():
-            admin_reminder_task.cancel()
-        if 'auto_close_task' in locals() or 'admin_reminder_task' in locals():
-            await asyncio.gather(
-                *[t for t in [locals().get('auto_close_task'), locals().get('admin_reminder_task')] if t],
-                return_exceptions=True
-            )
+        for task in [auto_close_task, admin_reminder_task]:
+            if task:
+                task.cancel()
+        tasks_to_cancel = [t for t in [auto_close_task, admin_reminder_task] if t]
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        await close_pool()
         await bot.session.close()
 
 
 if __name__ == "__main__":
+    run_migrations()
     asyncio.run(main())

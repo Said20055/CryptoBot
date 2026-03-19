@@ -1,33 +1,25 @@
-import aiosqlite
-from typing import Optional
-from utils.logging_config import logger
-from utils.database.db_connector import DB_NAME
-from utils.database import db_queries
+"""
+Контекстные менеджеры для работы с пулом asyncpg.
+
+transaction() — для операций записи (автоматический rollback при ошибке).
+acquire()      — для SELECT-запросов без транзакции.
+"""
+
+from contextlib import asynccontextmanager
+
+from .connection import get_pool
 
 
-async def get_active_order_for_user(user_id: int) -> Optional[dict]:
-    """Обертывает db_queries.get_active_order_for_user, управляя соединением.
-
-    Возвращает dict с данными заявки или None. Логирует и возвращает None при ошибке.
-    """
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.cursor() as cursor:
-                return await db_queries.get_active_order_for_user(cursor, user_id)
-    except Exception as e:
-        logger.error(f"DB helper error in get_active_order_for_user for {user_id}: {e}", exc_info=True)
-        return None
+@asynccontextmanager
+async def transaction():
+    """Соединение из пула + транзакция с автоматическим rollback при исключении."""
+    async with get_pool().acquire() as conn:
+        async with conn.transaction():
+            yield conn
 
 
-async def get_order_by_topic_id(topic_id: int) -> Optional[dict]:
-    """Обертывает db_queries.get_order_by_topic_id, управляя соединением.
-
-    Возвращает dict с полями order_id и user_id или None.
-    """
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.cursor() as cursor:
-                return await db_queries.get_order_by_topic_id(cursor, topic_id)
-    except Exception as e:
-        logger.error(f"DB helper error in get_order_by_topic_id for topic {topic_id}: {e}", exc_info=True)
-        return None
+@asynccontextmanager
+async def acquire():
+    """Соединение из пула без транзакции (для SELECT-запросов)."""
+    async with get_pool().acquire() as conn:
+        yield conn
