@@ -24,7 +24,7 @@ router = Router()
 async def _render_lottery_menu(message, user_id: int) -> None:
     """Обновляет сообщение с меню лотереи. Не трогает callback."""
     now = datetime.now()
-    logger.debug("[LOTTERY] _render_lottery_menu: user_id=%s", user_id)
+    logger.info("[LOTTERY] _render_lottery_menu: user_id=%s", user_id)
 
     async with transaction() as conn:
         logger.debug("[LOTTERY] fetching lottery_info from DB")
@@ -58,14 +58,19 @@ async def _render_lottery_menu(message, user_id: int) -> None:
         await message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         logger.debug("[LOTTERY] message edited successfully")
     except AiogramError as e:
-        logger.warning("[LOTTERY] edit_text failed (non-critical): %s", e)
+        logger.warning(f"[LOTTERY] edit_text failed, sending new message: {e}")
+        try:
+            await message.delete()
+        except AiogramError:
+            pass
+        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "lottery_menu")
 async def lottery_menu_handler(callback: CallbackQuery):
     """Показывает меню лотереи, проверяет и выдает ежедневный билет."""
     user_id = callback.from_user.id
-    logger.debug("[LOTTERY] lottery_menu_handler triggered: user_id=%s", user_id)
+    logger.info("[LOTTERY] lottery_menu_handler triggered: user_id=%s", user_id)
 
     try:
         await _render_lottery_menu(callback.message, user_id)
@@ -85,7 +90,7 @@ async def lottery_play_handler(callback: CallbackQuery):
     """Обрабатывает нажатие на кнопку 'Испытать удачу!'."""
     user_id = callback.from_user.id
     now = datetime.now()
-    logger.debug("[LOTTERY] lottery_play_handler triggered: user_id=%s", user_id)
+    logger.info("[LOTTERY] lottery_play_handler triggered: user_id=%s", user_id)
 
     try:
         async with transaction() as conn:
