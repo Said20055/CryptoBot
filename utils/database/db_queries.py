@@ -382,7 +382,7 @@ async def add_referral_earning(conn: asyncpg.Connection, order_id: int, referral
     if not referrer_id:
         return False
 
-    earning_amount = order_amount * (percentage / 100.0)
+    earning_amount = float(order_amount) * (percentage / 100.0)
 
     await conn.execute(
         "UPDATE users SET referral_balance = referral_balance + $1 WHERE user_id = $2",
