@@ -56,8 +56,8 @@ REFERRAL_PERCENTAGE = 10.0
 ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
 
 # Интервал уведомлений админов о необработанных заявках (в секундах).
-ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 120))
-ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 180))
+ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 30))
+ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 60))
 
 # Ночное окно по МСК, в которое отправляются напоминания администраторам.
 ADMIN_REMINDER_NIGHT_START_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_START_HOUR_MSK", 0))
