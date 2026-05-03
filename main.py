@@ -119,13 +119,9 @@ async def auto_close_orders_loop(bot: Bot):
 
 
 async def admin_orders_reminder_loop(bot: Bot):
-    """Шлёт напоминания о заявках только в ночное время по МСК."""
+    """Периодически шлёт напоминания о необработанных заявках всем админам в ЛС."""
     while True:
         try:
-            if not _is_msk_night_now():
-                await asyncio.sleep(_seconds_until_next_msk_night_start())
-                continue
-
             async with acquire() as conn:
                 processing = await get_processing_orders(conn)
 
@@ -133,7 +129,7 @@ async def admin_orders_reminder_loop(bot: Bot):
                 preview = ", ".join(f"#{o['order_id'] + ORDER_NUMBER_OFFSET}" for o in processing[:5])
                 suffix = " ..." if len(processing) > 5 else ""
                 text = (
-                    f"🌙🔔 Ночное напоминание: в работе <b>{len(processing)}</b> заявок. "
+                    f"🔔 Напоминание: в работе <b>{len(processing)}</b> заявок. "
                     f"Проверьте, пожалуйста: {preview}{suffix}"
                 )
                 for admin_id in admin_cache.all_ids():
@@ -142,7 +138,7 @@ async def admin_orders_reminder_loop(bot: Bot):
                     try:
                         await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
                     except Exception as e:
-                        logger.warning(f"Could not send night reminder to admin {admin_id}: {e}")
+                        logger.warning(f"Could not send reminder to admin {admin_id}: {e}")
         except Exception as e:
             logger.error(f"admin_orders_reminder_loop error: {e}", exc_info=True)
 
