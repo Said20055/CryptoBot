@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from .callbacks import CryptoInputSwitch, CryptoSelection, RubInputSwitch, OrdersPage, AdminOrderAction, CancelOrder
+from .callbacks import CryptoInputSwitch, CryptoSelection, RubInputSwitch, OrdersPage, AdminOrderAction, CancelOrder, AdminManageAction, UserBlockAction
 
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
@@ -117,6 +117,34 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
     builder.button(text="📢 Сделать рассылку", callback_data="admin_broadcast")
     builder.button(text="🎁 Создать промокод", callback_data="admin_create_promo")
     builder.button(text="⚙️ Управление реквизитами", callback_data="admin_settings")
+    builder.button(text="👥 Управление админами", callback_data="admin_manage_admins")
+    builder.button(text="🚫 Пользователи", callback_data="admin_manage_users")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_manage_admins_keyboard(admins: list, env_ids: frozenset) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for admin in admins:
+        uid = admin['user_id']
+        name = admin['username'] or str(uid)
+        if uid in env_ids:
+            builder.button(text=f"👑 {name}", callback_data="noop")
+        else:
+            builder.button(text=f"❌ {name}", callback_data=AdminManageAction(action="remove", user_id=uid).pack())
+    builder.button(text="➕ Добавить админа", callback_data="admin_add_admin")
+    builder.button(text="⬅️ Назад в админ-панель", callback_data="back_to_admin_panel")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_user_info_keyboard(user_id: int, is_blocked: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if is_blocked:
+        builder.button(text="✅ Разблокировать", callback_data=UserBlockAction(action="unblock", user_id=user_id).pack())
+    else:
+        builder.button(text="🚫 Заблокировать", callback_data=UserBlockAction(action="block", user_id=user_id).pack())
+    builder.button(text="⬅️ Назад в админ-панель", callback_data="back_to_admin_panel")
     builder.adjust(1)
     return builder.as_markup()
 

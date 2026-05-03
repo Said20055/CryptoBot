@@ -6,6 +6,8 @@ from .broadcast import router as broadcast_router
 from .promo import router as promo_router
 from .settings import router as settings_router
 from .stats import router as stats_router
+from .manage_admins import router as manage_admins_router
+from .users import router as users_router
 
 router = Router()
 router.include_routers(
@@ -15,4 +17,6 @@ router.include_routers(
     promo_router,
     settings_router,
     stats_router,
+    manage_admins_router,
+    users_router,
 )

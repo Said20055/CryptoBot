@@ -25,5 +25,11 @@ class ReferralStates(StatesGroup):
     waiting_for_withdrawal_details = State()
 
 class AdminPromoStates(StatesGroup):
-    waiting_for_promo_data = State()         # ввод CODE,USES,AMOUNT
-    waiting_for_discount_type = State()      # выбор типа скидки кнопкой
+    waiting_for_promo_data = State()
+    waiting_for_discount_type = State()
+
+class ManageAdminStates(StatesGroup):
+    waiting_for_user_id = State()
+
+class UserManageStates(StatesGroup):
+    waiting_for_user_id = State()

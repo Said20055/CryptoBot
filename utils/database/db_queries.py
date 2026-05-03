@@ -486,3 +486,43 @@ async def get_admin_statistics(conn: asyncpg.Connection) -> dict:
         'users_month': users_month,
         'lottery_day': lottery_day,
     }
+
+
+# --- ADMIN MANAGEMENT ---
+
+async def get_all_admins(conn: asyncpg.Connection) -> List[asyncpg.Record]:
+    return await conn.fetch("SELECT user_id, username FROM admins ORDER BY added_at ASC")
+
+
+async def upsert_admin(conn: asyncpg.Connection, user_id: int, username: str, added_by: int) -> None:
+    await conn.execute(
+        "INSERT INTO admins (user_id, username, added_at, added_by) VALUES ($1, $2, $3, $4) "
+        "ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username",
+        user_id, username, datetime.now(), added_by,
+    )
+
+
+async def delete_admin(conn: asyncpg.Connection, user_id: int) -> None:
+    await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
+
+
+# --- USER BLOCKING ---
+
+async def block_user(conn: asyncpg.Connection, user_id: int) -> None:
+    await conn.execute("UPDATE users SET is_blocked = 1 WHERE user_id = $1", user_id)
+
+
+async def unblock_user(conn: asyncpg.Connection, user_id: int) -> None:
+    await conn.execute("UPDATE users SET is_blocked = 0 WHERE user_id = $1", user_id)
+
+
+async def is_user_blocked(conn: asyncpg.Connection, user_id: int) -> bool:
+    val = await conn.fetchval("SELECT is_blocked FROM users WHERE user_id = $1", user_id)
+    return bool(val)
+
+
+async def get_user_info(conn: asyncpg.Connection, user_id: int) -> asyncpg.Record | None:
+    return await conn.fetchrow(
+        "SELECT user_id, username, full_name, is_blocked, created_at FROM users WHERE user_id = $1",
+        user_id,
+    )

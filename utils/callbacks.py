@@ -28,3 +28,13 @@ class AdminOrderAction(CallbackData, prefix="ao"):
 
 class CancelOrder(CallbackData, prefix="cancel_order"):
     order_id: int
+
+
+class AdminManageAction(CallbackData, prefix="adm_manage"):
+    action: str   # 'remove'
+    user_id: int
+
+
+class UserBlockAction(CallbackData, prefix="user_block"):
+    action: str   # 'block' | 'unblock'
+    user_id: int

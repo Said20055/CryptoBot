@@ -3,11 +3,8 @@
 from aiogram.filters import Filter
 from aiogram.types import Message, CallbackQuery
 from typing import Union
-from config import ADMIN_CHAT_ID
+import utils.admin_cache as admin_cache
 
 class AdminFilter(Filter):
-    """
-    Проверяет, является ли пользователь администратором.
-    """
     async def __call__(self, event: Union[Message, CallbackQuery]) -> bool:
-        return event.from_user.id in ADMIN_CHAT_ID
+        return admin_cache.contains(event.from_user.id)

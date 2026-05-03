@@ -26,10 +26,12 @@ from config import (
     DATABASE_URL,
 )
 from handlers import router
+import utils.admin_cache as admin_cache
 from utils.database.connection import init_pool, close_pool
 from utils.database.db_connector import run_migrations
 from utils.database.db_helpers import acquire, transaction
 from utils.database.db_queries import (
+    get_all_admins,
     get_orders_needing_warning,
     get_processing_orders,
     get_stale_processing_orders,
@@ -39,6 +41,7 @@ from utils.database.db_queries import (
 from utils.logging_config import logger
 from middlewares.throttling import ThrottlingMiddleware
 from middlewares.logging import LoggingMiddleware
+from middlewares.blocked_users import BlockedUserMiddleware
 
 MSK_TZ = ZoneInfo("Europe/Moscow")
 
@@ -129,14 +132,17 @@ async def admin_orders_reminder_loop(bot: Bot):
             if processing:
                 preview = ", ".join(f"#{o['order_id'] + ORDER_NUMBER_OFFSET}" for o in processing[:5])
                 suffix = " ..." if len(processing) > 5 else ""
-                await bot.send_message(
-                    chat_id=SUPPORT_GROUP_ID,
-                    text=(
-                        f"🌙🔔 Ночное напоминание: в работе <b>{len(processing)}</b> заявок. "
-                        f"Проверьте, пожалуйста: {preview}{suffix}"
-                    ),
-                    parse_mode="HTML",
+                text = (
+                    f"🌙🔔 Ночное напоминание: в работе <b>{len(processing)}</b> заявок. "
+                    f"Проверьте, пожалуйста: {preview}{suffix}"
                 )
+                for admin_id in admin_cache.all_ids():
+                    if str(admin_id).startswith("114"):
+                        continue
+                    try:
+                        await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
+                    except Exception as e:
+                        logger.warning(f"Could not send night reminder to admin {admin_id}: {e}")
         except Exception as e:
             logger.error(f"admin_orders_reminder_loop error: {e}", exc_info=True)
 
@@ -145,6 +151,12 @@ async def admin_orders_reminder_loop(bot: Bot):
 
 async def main():
     await init_pool(DATABASE_URL)
+
+    async with acquire() as conn:
+        db_admins = await get_all_admins(conn)
+    db_admin_ids = [r['user_id'] for r in db_admins]
+    admin_cache.init(ADMIN_CHAT_ID, db_admin_ids)
+    logger.info(f"Admin cache initialized: {admin_cache.all_ids()}")
 
     bot = Bot(token=TOKEN)
     auto_close_task = None
@@ -155,6 +167,8 @@ async def main():
         logger.info(f"Bot started: {bot_info.first_name} @{bot_info.username}")
 
         dp = Dispatcher(storage=MemoryStorage())
+        dp.message.middleware(BlockedUserMiddleware())
+        dp.callback_query.middleware(BlockedUserMiddleware())
         dp.message.middleware(ThrottlingMiddleware(rate=1.0))
         dp.message.middleware(LoggingMiddleware())
         dp.callback_query.middleware(LoggingMiddleware())
@@ -167,7 +181,7 @@ async def main():
         admin_commands = default_commands + [BotCommand(command="/admin", description="Admin panel")]
 
         await bot.set_my_commands(default_commands)
-        for admin_id in ADMIN_CHAT_ID:
+        for admin_id in admin_cache.all_ids():
             try:
                 await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
             except AiogramError as e:
