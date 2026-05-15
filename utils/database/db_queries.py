@@ -576,6 +576,12 @@ async def get_admin_user_profile(conn: asyncpg.Connection, user_id: int) -> dict
         user_id,
     )
 
+    earnings_history = await conn.fetch(
+        "SELECT amount, created_at, referral_id FROM referral_earnings "
+        "WHERE referrer_id = $1 ORDER BY created_at DESC LIMIT 10",
+        user_id,
+    )
+
     return {
         'user': user,
         'referral_count': referral_count,
@@ -584,4 +590,5 @@ async def get_admin_user_profile(conn: asyncpg.Connection, user_id: int) -> dict
         'orders': orders_stats,
         'withdrawals': withdrawals,
         'recent_orders': recent_orders,
+        'earnings_history': earnings_history,
     }

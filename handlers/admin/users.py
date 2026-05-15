@@ -57,6 +57,13 @@ def _format_profile(data: dict) -> str:
         )
     recent_str = "\n".join(recent_lines) if recent_lines else "  нет заявок"
 
+    # Referral earnings history
+    earnings_lines = []
+    for e in data['earnings_history']:
+        dt = e['created_at'].strftime("%d.%m.%Y") if e['created_at'] else "—"
+        earnings_lines.append(f"  +{float(e['amount']):,.2f} RUB  ({dt}, от <code>{e['referral_id']}</code>)")
+    earnings_str = "\n".join(earnings_lines) if earnings_lines else "  нет начислений"
+
     # Promo and lottery
     promo = u['activated_promo'] or "—"
     lottery = u['last_lottery_play'].strftime("%d.%m.%Y %H:%M") if u['last_lottery_play'] else "—"
@@ -79,6 +86,8 @@ def _format_profile(data: dict) -> str:
         f"\n<b>── Рефералы ──</b>\n"
         f"👥 Приглашено: {data['referral_count']}\n"
         f"👆 Приглашён: {referrer_line}\n"
+        f"\n<b>── История реф. начислений (последние 10) ──</b>\n"
+        f"{earnings_str}\n"
         f"\n<b>── Прочее ──</b>\n"
         f"🎁 Промокод: {promo}\n"
         f"🎰 Последняя лотерея: {lottery}"
