@@ -526,3 +526,62 @@ async def get_user_info(conn: asyncpg.Connection, user_id: int) -> asyncpg.Recor
         "SELECT user_id, username, full_name, is_blocked, created_at FROM users WHERE user_id = $1",
         user_id,
     )
+
+
+async def get_admin_user_profile(conn: asyncpg.Connection, user_id: int) -> dict | None:
+    user = await conn.fetchrow(
+        "SELECT user_id, username, full_name, created_at, is_blocked, "
+        "referral_balance, referrer_id, activated_promo, last_lottery_play "
+        "FROM users WHERE user_id = $1",
+        user_id,
+    )
+    if not user:
+        return None
+
+    referral_count = await conn.fetchval(
+        "SELECT COUNT(*) FROM users WHERE referrer_id = $1", user_id)
+
+    total_earned = await conn.fetchval(
+        "SELECT COALESCE(SUM(amount), 0) FROM referral_earnings WHERE referrer_id = $1", user_id)
+
+    referrer = None
+    if user['referrer_id']:
+        referrer = await conn.fetchrow(
+            "SELECT user_id, username, full_name FROM users WHERE user_id = $1",
+            user['referrer_id'],
+        )
+
+    orders_stats = await conn.fetchrow(
+        """SELECT
+               COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+               COUNT(*) FILTER (WHERE status IN ('rejected', 'cancelled_by_user', 'auto_closed')) AS cancelled,
+               COUNT(*) FILTER (WHERE status = 'processing') AS processing,
+               COALESCE(SUM(amount_rub) FILTER (WHERE status = 'completed'), 0) AS total_volume
+           FROM orders WHERE user_id = $1""",
+        user_id,
+    )
+
+    withdrawals = await conn.fetchrow(
+        """SELECT
+               COALESCE(SUM(amount), 0) AS total_withdrawn,
+               COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0) AS pending
+           FROM withdrawal_requests WHERE user_id = $1""",
+        user_id,
+    )
+
+    recent_orders = await conn.fetch(
+        "SELECT order_id, action, crypto, amount_rub, status, created_at "
+        "FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 3",
+        user_id,
+    )
+
+    return {
+        'user': user,
+        'referral_count': referral_count,
+        'total_earned': total_earned,
+        'referrer': referrer,
+        'orders': orders_stats,
+        'withdrawals': withdrawals,
+        'recent_orders': recent_orders,
+    }
