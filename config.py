@@ -30,6 +30,7 @@ SUPPORT_GROUP_ID = int(os.getenv("SUPPORT_GROUP_ID", 0))
 # Загружаем адреса кошельков. Если переменная не найдена, используется пустая строка.
 CRYPTO_WALLETS = {
     "BTC": os.getenv("WALLET_BTC", ""),
+    "LTC": os.getenv("WALLET_LTC", ""),
     "TRX": os.getenv("WALLET_TRX", ""),
     "USDT": os.getenv("WALLET_USDT", ""),
 }
@@ -70,7 +71,7 @@ ORDER_GREETING_DELAY_SECONDS = int(os.getenv("ORDER_GREETING_DELAY_SECONDS", 5))
 ORDER_NUMBER_OFFSET = 9999
 
 # Минимальная сумма в рублях для создания заявки на вывод реферального баланса
-MIN_WITHDRAWAL_AMOUNT = 300 # 1000 RUB
+MIN_WITHDRAWAL_AMOUNT = 3000 # 3000 RUB
 
 
 # ==========================================================

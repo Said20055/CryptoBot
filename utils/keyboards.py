@@ -32,7 +32,10 @@ def get_back_to_main_menu_keyboard() -> InlineKeyboardMarkup:
 
 def get_crypto_selection_keyboard(action: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🟡 Bitcoin (BTC)", callback_data=CryptoSelection(action=action, crypto="BTC").pack())
+    builder.row(
+        InlineKeyboardButton(text="🟡 Bitcoin (BTC)", callback_data=CryptoSelection(action=action, crypto="BTC").pack()),
+        InlineKeyboardButton(text="🔵 Litecoin (LTC)", callback_data=CryptoSelection(action=action, crypto="LTC").pack()),
+    )
     builder.row(
         InlineKeyboardButton(text="🔷 TRON (TRX)", callback_data=CryptoSelection(action=action, crypto="TRX").pack()),
         InlineKeyboardButton(text="💵 Tether (USDT)", callback_data=CryptoSelection(action=action, crypto="USDT").pack()),
