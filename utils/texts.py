@@ -63,7 +63,7 @@ def format_user_display_name(username: str) -> str:
 
 
 def get_profile_text(user_id: int, profile_data: dict, bot_username: str,
-                     ref_info: dict, ref_percentage: float) -> tuple:
+                     ref_info: dict, ref_percentage: float, min_withdrawal_amount: int) -> tuple:
     """Возвращает (текст профиля, баланс) для get_profile_keyboard."""
     if profile_data:
         username = profile_data['username'] or "не указан"
@@ -88,14 +88,14 @@ def get_profile_text(user_id: int, profile_data: dict, bot_username: str,
     referral_block = (
         "\n\n<b>👥 Ваша реферальная программа</b>\n\n"
         f"Приглашайте друзей и получайте <b>{ref_percentage:.1f}%</b> "
-        "с суммы каждого их успешного обмена!\n\n"
+        "с суммы комиссий каждого их успешного обмена!\n\n"
         "🔗 <b>Ваша уникальная ссылка:</b>\n"
         f"<code>{referral_link}</code>\n"
         "<i>(Нажмите, чтобы скопировать)</i>\n\n"
         "📈 <b>Реферальная статистика:</b>\n"
         f"  • Приглашено пользователей: <b>{referral_count}</b>\n"
         f"  • Текущий баланс: <b>{balance:,.2f} RUB</b>\n\n"
-        "Накопленные средства можно вывести, когда баланс достигнет минимальной суммы — 300 рублей."
+        f"Накопленные средства можно вывести, когда баланс достигнет минимальной суммы — {min_withdrawal_amount} рублей."
     )
 
     return profile_block + referral_block, balance

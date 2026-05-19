@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
-from config import ADMIN_CHAT_ID, MIN_WITHDRAWAL_AMOUNT, REFERRAL_PERCENTAGE
+from config import ADMIN_CHAT_ID, MIN_WITHDRAWAL_AMOUNT, REFERRAL_PERCENTAGE, MIN_WITHDRAWAL_AMOUNT
 from utils import keyboards, texts
 from utils.logging_config import logger
 from utils.texts import WELCOME_PHOTO_URL, WELCOME_TEXT
@@ -112,7 +112,7 @@ async def profile_handler(event: Message | CallbackQuery):
 
     text, balance = texts.get_profile_text(
         user_id=user_id, bot_username=bot_username,
-        profile_data=profile_data, ref_info=ref_info, ref_percentage=REFERRAL_PERCENTAGE,
+        profile_data=profile_data, ref_info=ref_info, ref_percentage=REFERRAL_PERCENTAGE, min_withdrawal_amount=MIN_WITHDRAWAL_AMOUNT
     )
     keyboard = keyboards.get_profile_keyboard(balance, MIN_WITHDRAWAL_AMOUNT)
 
