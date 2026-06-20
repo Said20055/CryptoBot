@@ -172,10 +172,20 @@ def get_user_requisites_prompt_text(action: str, crypto: str) -> str:
     )
 
 
+def get_payment_bank_prompt_text() -> str:
+    return (
+        "🏦 <b>С какого банка вы будете переводить оплату?</b>\n\n"
+        "Напишите название банка одним сообщением (например: <code>Сбербанк</code>, "
+        "<code>Т-Банк</code>, <code>Альфа-Банк</code>).\n"
+        "Это нужно, чтобы оператор быстрее нашёл ваш платёж."
+    )
+
+
 def get_transaction_summary_text(
     action: str, crypto: str, amount_crypto: float, amount_rub: float,
     total_amount: float, base_service_rub: float, base_network_rub: float,
     promo_applied: bool, promo_discount_rub: float, user_requisites: str,
+    payment_bank: str | None = None,
 ) -> str:
     if action == 'buy':
         requisites_title = "Ваш кошелек для получения"
@@ -185,12 +195,14 @@ def get_transaction_summary_text(
         total_line = f"<b>К получению:</b> <code>{total_amount:.0f} RUB</code>"
 
     discount_line = f"<b>Скидка по промокоду:</b> <code>-{promo_discount_rub:.0f} RUB</code>\n" if promo_applied else ""
+    bank_line = f"<b>Банк для перевода:</b> <code>{html.escape(payment_bank)}</code>\n" if payment_bank else ""
 
     return (
         f"<b>🔍 Пожалуйста, проверьте все данные:</b>\n\n"
         f"<b>Действие:</b> {'Покупка' if action == 'buy' else 'Продажа'} {crypto.upper()}\n"
         f"<b>Сумма в криптовалюте:</b> <code>{amount_crypto:.8f} {crypto.upper()}</code>\n"
         f"<b>Сумма в рублях:</b> <code>{amount_rub:.0f} RUB</code>\n\n"
+        f"{bank_line}"
         f"<b>{requisites_title}:</b>\n"
         f"<code>{html.escape(user_requisites)}</code>\n\n"
         f"<b>Комиссия сервиса:</b> {base_service_rub:.0f} RUB\n"
@@ -234,6 +246,12 @@ def get_admin_order_notification_text(
         f"\n<b>{html.escape(user_details_title)}</b>",
         f"<code>{html.escape(user_input or 'N/A')}</code>",
     ]
+
+    if payment_bank := order_data.get('payment_bank'):
+        details.insert(
+            len(details) - 2,
+            f"\n🏦 <b>Банк отправителя:</b> <code>{html.escape(payment_bank)}</code>",
+        )
 
     if order_data.get('promo_applied'):
         details.insert(1, "✅ <b>ИСПОЛЬЗОВАН ПРОМОКОД</b>")

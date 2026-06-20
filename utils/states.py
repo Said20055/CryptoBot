@@ -14,6 +14,7 @@ class TransactionStates(StatesGroup):
     """Состояния для создания транзакции"""
     waiting_for_crypto_amount = State()  # Ожидание ввода суммы в криптовалюте
     waiting_for_rub_amount = State()     # Ожидание ввода суммы в рублях
+    waiting_for_payment_bank = State()   # Ожидание банка, с которого пользователь будет переводить
     waiting_for_user_requisites = State()
     waiting_for_operator_reply = State() # Ожидание ответа оператору
 

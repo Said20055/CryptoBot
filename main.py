@@ -4,7 +4,6 @@
 """
 
 import asyncio
-import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -15,10 +14,12 @@ from aiogram.types import BotCommand, BotCommandScopeChat
 
 from config import (
     ADMIN_CHAT_ID,
-    ADMIN_REMINDER_MAX_SECONDS,
-    ADMIN_REMINDER_MIN_SECONDS,
+    ADMIN_REMINDER_BURST_SECONDS,
+    ADMIN_REMINDER_GENERAL_TOPIC_ID,
+    ADMIN_REMINDER_INTERVAL_SECONDS,
     ADMIN_REMINDER_NIGHT_END_HOUR_MSK,
     ADMIN_REMINDER_NIGHT_START_HOUR_MSK,
+    ADMIN_REMINDER_TICK_SECONDS,
     ORDER_AUTO_CLOSE_MINUTES,
     ORDER_NUMBER_OFFSET,
     SUPPORT_GROUP_ID,
@@ -119,30 +120,50 @@ async def auto_close_orders_loop(bot: Bot):
 
 
 async def admin_orders_reminder_loop(bot: Bot):
-    """Периодически шлёт напоминания о необработанных заявках всем админам в ЛС."""
+    """Шлёт напоминания о необработанных заявках в General-тему группы поддержки.
+
+    Частота адаптивная: пока есть «свежая» заявка (моложе ADMIN_REMINDER_BURST_SECONDS),
+    напоминания идут часто — раз в тик цикла. Когда свежих заявок нет, напоминание
+    отправляется не чаще одного раза в ADMIN_REMINDER_INTERVAL_SECONDS (по умолчанию 2 минуты).
+    """
+    last_sent_at: datetime | None = None
     while True:
         try:
             async with acquire() as conn:
                 processing = await get_processing_orders(conn)
 
             if processing:
-                preview = ", ".join(f"#{o['order_id'] + ORDER_NUMBER_OFFSET}" for o in processing[:5])
-                suffix = " ..." if len(processing) > 5 else ""
-                text = (
-                    f"🔔 Напоминание: в работе <b>{len(processing)}</b> заявок. "
-                    f"Проверьте, пожалуйста: {preview}{suffix}"
+                now = datetime.now()
+                youngest_age = min((now - o["created_at"]).total_seconds() for o in processing)
+                in_burst = youngest_age < ADMIN_REMINDER_BURST_SECONDS
+                throttled = (
+                    last_sent_at is not None
+                    and (now - last_sent_at).total_seconds() < ADMIN_REMINDER_INTERVAL_SECONDS
                 )
-                for admin_id in admin_cache.all_ids():
-                    if str(admin_id).startswith("114"):
-                        continue
+
+                if in_burst or not throttled:
+                    preview = ", ".join(f"#{o['order_id'] + ORDER_NUMBER_OFFSET}" for o in processing[:5])
+                    suffix = " ..." if len(processing) > 5 else ""
+                    text = (
+                        f"🔔 Напоминание: в работе <b>{len(processing)}</b> заявок. "
+                        f"Проверьте, пожалуйста: {preview}{suffix}"
+                    )
                     try:
-                        await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
+                        await bot.send_message(
+                            chat_id=SUPPORT_GROUP_ID,
+                            message_thread_id=ADMIN_REMINDER_GENERAL_TOPIC_ID,
+                            text=text,
+                            parse_mode="HTML",
+                        )
+                        last_sent_at = now
                     except Exception as e:
-                        logger.warning(f"Could not send reminder to admin {admin_id}: {e}")
+                        logger.warning(f"Could not send reminder to General topic: {e}")
+            else:
+                last_sent_at = None
         except Exception as e:
             logger.error(f"admin_orders_reminder_loop error: {e}", exc_info=True)
 
-        await asyncio.sleep(random.randint(ADMIN_REMINDER_MIN_SECONDS, ADMIN_REMINDER_MAX_SECONDS))
+        await asyncio.sleep(ADMIN_REMINDER_TICK_SECONDS)
 
 
 async def main():

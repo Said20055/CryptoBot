@@ -54,11 +54,18 @@ SBP_BANK = os.getenv("SBP_BANK")
 REFERRAL_PERCENTAGE = 10.0
 
 # Через сколько минут заявка закрывается автоматически, если оператор не обработал её.
-ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 15))
+ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 25))
 
-# Интервал уведомлений админов о необработанных заявках (в секундах).
-ADMIN_REMINDER_MIN_SECONDS = int(os.getenv("ADMIN_REMINDER_MIN_SECONDS", 30))
-ADMIN_REMINDER_MAX_SECONDS = int(os.getenv("ADMIN_REMINDER_MAX_SECONDS", 60))
+# --- Напоминания о необработанных заявках ---
+# Напоминания публикуются в General-теме группы поддержки (а не в ЛС админам).
+# ID General-темы форума (по умолчанию 1).
+ADMIN_REMINDER_GENERAL_TOPIC_ID = int(os.getenv("ADMIN_REMINDER_GENERAL_TOPIC_ID", 1))
+# Как часто крутится цикл напоминаний (сек). Определяет частоту «пачки» в первые секунды.
+ADMIN_REMINDER_TICK_SECONDS = int(os.getenv("ADMIN_REMINDER_TICK_SECONDS", 10))
+# Окно после появления свежей заявки, в течение которого можно слать часто (сек).
+ADMIN_REMINDER_BURST_SECONDS = int(os.getenv("ADMIN_REMINDER_BURST_SECONDS", 30))
+# Обычный интервал напоминаний после окончания «пачки» (сек). По умолчанию 2 минуты.
+ADMIN_REMINDER_INTERVAL_SECONDS = int(os.getenv("ADMIN_REMINDER_INTERVAL_SECONDS", 120))
 
 # Ночное окно по МСК, в которое отправляются напоминания администраторам.
 ADMIN_REMINDER_NIGHT_START_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_START_HOUR_MSK", 0))

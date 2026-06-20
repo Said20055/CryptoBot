@@ -193,10 +193,45 @@ async def process_amount_input(message: Message, state: FSMContext, bot: Bot):
         promo_applied=promo_applied, promo_discount_rub=promo_discount_rub, promo_code=promo_code,
     )
 
+    # Для покупки сперва уточняем банк, с которого пользователь будет переводить оплату.
+    if action == "buy":
+        next_text = texts.get_payment_bank_prompt_text()
+        next_state = TransactionStates.waiting_for_payment_bank
+    else:
+        next_text = texts.get_user_requisites_prompt_text(action, crypto)
+        next_state = TransactionStates.waiting_for_user_requisites
+
     if last_id := data.get("last_bot_message_id"):
         await bot.edit_message_text(
             chat_id=message.chat.id, message_id=last_id,
-            text=texts.get_user_requisites_prompt_text(action, crypto),
+            text=next_text,
+            reply_markup=keyboards.get_cancel_keyboard(),
+            parse_mode="HTML",
+        )
+    await state.set_state(next_state)
+
+
+@router.message(TransactionStates.waiting_for_payment_bank)
+async def process_payment_bank(message: Message, state: FSMContext, bot: Bot):
+    bank = (message.text or "").strip()
+    await message.delete()
+    data = await state.get_data()
+
+    if not bank:
+        if last_id := data.get("last_bot_message_id"):
+            await bot.edit_message_text(
+                chat_id=message.chat.id, message_id=last_id,
+                text="❌ Введите название банка текстом.\n\n" + texts.get_payment_bank_prompt_text(),
+                reply_markup=keyboards.get_cancel_keyboard(),
+                parse_mode="HTML",
+            )
+        return
+
+    await state.update_data(payment_bank=bank)
+    if last_id := data.get("last_bot_message_id"):
+        await bot.edit_message_text(
+            chat_id=message.chat.id, message_id=last_id,
+            text=texts.get_user_requisites_prompt_text(data["action"], data["crypto"]),
             reply_markup=keyboards.get_cancel_keyboard(),
             parse_mode="HTML",
         )
@@ -219,6 +254,7 @@ async def process_user_requisites(message: Message, state: FSMContext, bot: Bot)
         promo_applied=data["promo_applied"],
         promo_discount_rub=data.get("promo_discount_rub", 0.0),
         user_requisites=user_requisites,
+        payment_bank=data.get("payment_bank"),
     )
 
     if last_id := data.get("last_bot_message_id"):
@@ -276,13 +312,18 @@ async def _create_order_and_enter_chat(bot: Bot, state: FSMContext, from_user,
             chat_id=SUPPORT_GROUP_ID, name=f"Заявка от {from_user.full_name}"
         )
         promo_code = data.get('promo_code')
+        payment_bank = data.get('payment_bank')
+        stored_requisites = (
+            f"Банк отправителя: {payment_bank}\n{user_requisites}"
+            if payment_bank else user_requisites
+        )
         order_id = await create_order(
             conn, user_id=user_id, topic_id=topic.message_thread_id,
             username=from_user.username or "Нет username",
             action=data.get('action'), crypto=data.get('crypto'),
             amount_crypto=data.get('amount_crypto'),
             amount_rub=data.get('total_amount'),
-            phone_and_bank=user_requisites, promo_code=promo_code,
+            phone_and_bank=stored_requisites, promo_code=promo_code,
             service_commission_rub=data.get('service_commission_rub', 0.0),
             network_fee_rub=data.get('network_fee_rub', 0.0),
         )
