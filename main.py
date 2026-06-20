@@ -148,13 +148,14 @@ async def admin_orders_reminder_loop(bot: Bot):
                         f"🔔 Напоминание: в работе <b>{len(processing)}</b> заявок. "
                         f"Проверьте, пожалуйста: {preview}{suffix}"
                     )
+                    # В форум-группах General-тему (thread 1) нельзя адресовать через
+                    # message_thread_id — Telegram отвечает "message thread not found".
+                    # Сообщение без thread_id попадает именно в General.
+                    send_kwargs = {"chat_id": SUPPORT_GROUP_ID, "text": text, "parse_mode": "HTML"}
+                    if ADMIN_REMINDER_GENERAL_TOPIC_ID and ADMIN_REMINDER_GENERAL_TOPIC_ID > 1:
+                        send_kwargs["message_thread_id"] = ADMIN_REMINDER_GENERAL_TOPIC_ID
                     try:
-                        await bot.send_message(
-                            chat_id=SUPPORT_GROUP_ID,
-                            message_thread_id=ADMIN_REMINDER_GENERAL_TOPIC_ID,
-                            text=text,
-                            parse_mode="HTML",
-                        )
+                        await bot.send_message(**send_kwargs)
                         last_sent_at = now
                     except Exception as e:
                         logger.warning(f"Could not send reminder to General topic: {e}")
