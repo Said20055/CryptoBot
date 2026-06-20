@@ -61,7 +61,7 @@ ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 25))
 # ID General-темы форума (по умолчанию 1).
 ADMIN_REMINDER_GENERAL_TOPIC_ID = int(os.getenv("ADMIN_REMINDER_GENERAL_TOPIC_ID", 1))
 # Как часто крутится цикл напоминаний (сек). Определяет частоту «пачки» в первые секунды.
-ADMIN_REMINDER_TICK_SECONDS = int(os.getenv("ADMIN_REMINDER_TICK_SECONDS", 10))
+ADMIN_REMINDER_TICK_SECONDS = int(os.getenv("ADMIN_REMINDER_TICK_SECONDS", 5))
 # Окно после появления свежей заявки, в течение которого можно слать часто (сек).
 ADMIN_REMINDER_BURST_SECONDS = int(os.getenv("ADMIN_REMINDER_BURST_SECONDS", 30))
 # Обычный интервал напоминаний после окончания «пачки» (сек). По умолчанию 2 минуты.
