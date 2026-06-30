@@ -12,8 +12,10 @@ from config import SUPPORT_GROUP_ID
 from utils import keyboards
 from utils.logging_config import logger
 from utils.states import TransactionStates
-from utils.database.db_helpers import acquire
-from utils.database.db_queries import get_active_order_for_user, get_order_by_topic_id
+from utils.database.db_helpers import acquire, transaction
+from utils.database.db_queries import (
+    get_active_order_for_user, get_order_by_topic_id, mark_order_operator_responded,
+)
 
 # Два роутера: для ЛС и для группы поддержки
 private_router = Router()
@@ -102,6 +104,13 @@ async def operator_reply_to_user_handler(message: Message, bot: Bot):
 
     if not order_info or not order_info.get('user_id'):
         return
+
+    # Оператор ответил в теме — прекращаем напоминания по этой заявке.
+    try:
+        async with transaction() as conn:
+            await mark_order_operator_responded(conn, order_info['order_id'])
+    except Exception as e:
+        logger.warning(f"Could not mark operator response for order #{order_info['order_id']}: {e}")
 
     user_id = order_info['user_id']
     header = "💬 <b>Ответ от оператора:</b>\n\n"

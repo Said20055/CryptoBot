@@ -209,13 +209,27 @@ async def mark_order_warned(conn: asyncpg.Connection, order_id: int) -> None:
 async def get_processing_orders(conn: asyncpg.Connection) -> List[dict]:
     """Возвращает все заявки в статусе processing для напоминаний админам."""
     rows = await conn.fetch(
-        "SELECT order_id, user_id, topic_id, created_at FROM orders WHERE status = 'processing' ORDER BY created_at ASC"
+        "SELECT order_id, user_id, topic_id, created_at FROM orders "
+        "WHERE status = 'processing' AND operator_responded_at IS NULL "
+        "ORDER BY created_at ASC"
     )
     return [
         {'order_id': r['order_id'], 'user_id': r['user_id'],
          'topic_id': r['topic_id'], 'created_at': r['created_at']}
         for r in rows
     ]
+
+
+async def mark_order_operator_responded(conn: asyncpg.Connection, order_id: int) -> None:
+    """Помечает, что оператор ответил в теме заявки (чтобы прекратить напоминания).
+
+    Ставит метку только один раз — повторные ответы оператора её не сдвигают.
+    """
+    await conn.execute(
+        "UPDATE orders SET operator_responded_at = $1 "
+        "WHERE order_id = $2 AND operator_responded_at IS NULL",
+        datetime.now(), order_id
+    )
 
 
 async def get_user_orders_page(conn: asyncpg.Connection, user_id: int,
