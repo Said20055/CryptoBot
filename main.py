@@ -15,7 +15,6 @@ from aiogram.types import BotCommand, BotCommandScopeChat
 from config import (
     ADMIN_CHAT_ID,
     ADMIN_REMINDER_BURST_SECONDS,
-    ADMIN_REMINDER_GENERAL_TOPIC_ID,
     ADMIN_REMINDER_INTERVAL_SECONDS,
     ADMIN_REMINDER_NIGHT_END_HOUR_MSK,
     ADMIN_REMINDER_NIGHT_START_HOUR_MSK,
@@ -120,47 +119,56 @@ async def auto_close_orders_loop(bot: Bot):
 
 
 async def admin_orders_reminder_loop(bot: Bot):
-    """Шлёт напоминания о необработанных заявках в General-тему группы поддержки.
+    """Шлёт напоминания о необработанных заявках прямо в тему каждой заявки.
 
-    Частота адаптивная: пока есть «свежая» заявка (моложе ADMIN_REMINDER_BURST_SECONDS),
-    напоминания идут часто — раз в тик цикла. Когда свежих заявок нет, напоминание
-    отправляется не чаще одного раза в ADMIN_REMINDER_INTERVAL_SECONDS (по умолчанию 2 минуты).
+    Так тап по уведомлению Telegram открывает нужную тему напрямую. Частота — по
+    каждой заявке отдельно: пока заявка «свежая» (моложе ADMIN_REMINDER_BURST_SECONDS),
+    напоминания идут часто (раз в тик цикла), затем — не чаще одного раза в
+    ADMIN_REMINDER_INTERVAL_SECONDS (по умолчанию 2 минуты).
     """
-    last_sent_at: datetime | None = None
+    last_sent: dict[int, datetime] = {}
     while True:
         try:
             async with acquire() as conn:
                 processing = await get_processing_orders(conn)
 
-            if processing:
-                now = datetime.now()
-                youngest_age = min((now - o["created_at"]).total_seconds() for o in processing)
-                in_burst = youngest_age < ADMIN_REMINDER_BURST_SECONDS
-                throttled = (
-                    last_sent_at is not None
-                    and (now - last_sent_at).total_seconds() < ADMIN_REMINDER_INTERVAL_SECONDS
-                )
+            now = datetime.now()
+            active_ids = set()
+            for order in processing:
+                order_id = order["order_id"]
+                active_ids.add(order_id)
+                topic_id = order.get("topic_id")
+                if not topic_id:
+                    continue
 
-                if in_burst or not throttled:
-                    preview = ", ".join(f"#{o['order_id'] + ORDER_NUMBER_OFFSET}" for o in processing[:5])
-                    suffix = " ..." if len(processing) > 5 else ""
-                    text = (
-                        f"🔔 Напоминание: в работе <b>{len(processing)}</b> заявок. "
-                        f"Проверьте, пожалуйста: {preview}{suffix}"
+                age = (now - order["created_at"]).total_seconds()
+                in_burst = age < ADMIN_REMINDER_BURST_SECONDS
+                prev = last_sent.get(order_id)
+                throttled = prev is not None and (now - prev).total_seconds() < ADMIN_REMINDER_INTERVAL_SECONDS
+                if not (in_burst or not throttled):
+                    continue
+
+                order_number = order_id + ORDER_NUMBER_OFFSET
+                minutes = int(age // 60)
+                age_note = f" (уже {minutes} мин)" if minutes >= 1 else ""
+                text = (
+                    f"🔔 <b>Заявка #{order_number} ещё не обработана{age_note}.</b>\n"
+                    f"Возьмите её, пожалуйста, в работу."
+                )
+                try:
+                    await bot.send_message(
+                        chat_id=SUPPORT_GROUP_ID,
+                        message_thread_id=topic_id,
+                        text=text,
+                        parse_mode="HTML",
                     )
-                    # В форум-группах General-тему (thread 1) нельзя адресовать через
-                    # message_thread_id — Telegram отвечает "message thread not found".
-                    # Сообщение без thread_id попадает именно в General.
-                    send_kwargs = {"chat_id": SUPPORT_GROUP_ID, "text": text, "parse_mode": "HTML"}
-                    if ADMIN_REMINDER_GENERAL_TOPIC_ID and ADMIN_REMINDER_GENERAL_TOPIC_ID > 1:
-                        send_kwargs["message_thread_id"] = ADMIN_REMINDER_GENERAL_TOPIC_ID
-                    try:
-                        await bot.send_message(**send_kwargs)
-                        last_sent_at = now
-                    except Exception as e:
-                        logger.warning(f"Could not send reminder to General topic: {e}")
-            else:
-                last_sent_at = None
+                    last_sent[order_id] = now
+                except Exception as e:
+                    logger.warning(f"Could not send reminder to topic {topic_id} (order #{order_number}): {e}")
+
+            # Чистим трекинг по заявкам, которые больше не в работе.
+            for oid in [oid for oid in last_sent if oid not in active_ids]:
+                del last_sent[oid]
         except Exception as e:
             logger.error(f"admin_orders_reminder_loop error: {e}", exc_info=True)
 

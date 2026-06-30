@@ -57,9 +57,8 @@ REFERRAL_PERCENTAGE = 10.0
 ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 25))
 
 # --- Напоминания о необработанных заявках ---
-# Напоминания публикуются в General-теме группы поддержки (а не в ЛС админам).
-# ID General-темы форума (по умолчанию 1).
-ADMIN_REMINDER_GENERAL_TOPIC_ID = int(os.getenv("ADMIN_REMINDER_GENERAL_TOPIC_ID", 1))
+# Напоминания публикуются прямо в тему каждой заявки в группе поддержки,
+# чтобы тап по уведомлению открывал нужную тему напрямую.
 # Как часто крутится цикл напоминаний (сек). Определяет частоту «пачки» в первые секунды.
 ADMIN_REMINDER_TICK_SECONDS = int(os.getenv("ADMIN_REMINDER_TICK_SECONDS", 5))
 # Окно после появления свежей заявки, в течение которого можно слать часто (сек).
