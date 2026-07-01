@@ -59,12 +59,10 @@ ORDER_AUTO_CLOSE_MINUTES = int(os.getenv("ORDER_AUTO_CLOSE_MINUTES", 25))
 # --- Напоминания о необработанных заявках ---
 # Напоминания публикуются прямо в тему каждой заявки в группе поддержки,
 # чтобы тап по уведомлению открывал нужную тему напрямую.
-# Как часто крутится цикл напоминаний (сек). Определяет частоту «пачки» в первые секунды.
-ADMIN_REMINDER_TICK_SECONDS = int(os.getenv("ADMIN_REMINDER_TICK_SECONDS", 5))
-# Окно после появления свежей заявки, в течение которого можно слать часто (сек).
-ADMIN_REMINDER_BURST_SECONDS = int(os.getenv("ADMIN_REMINDER_BURST_SECONDS", 30))
-# Обычный интервал напоминаний после окончания «пачки» (сек). По умолчанию 2 минуты.
-ADMIN_REMINDER_INTERVAL_SECONDS = int(os.getenv("ADMIN_REMINDER_INTERVAL_SECONDS", 120))
+# Как часто крутится цикл напоминаний (сек).
+ADMIN_REMINDER_TICK_SECONDS = int(os.getenv("ADMIN_REMINDER_TICK_SECONDS", 15))
+# Интервал напоминаний по каждой необработанной заявке (сек). По умолчанию 1.5 минуты.
+ADMIN_REMINDER_INTERVAL_SECONDS = int(os.getenv("ADMIN_REMINDER_INTERVAL_SECONDS", 90))
 
 # Ночное окно по МСК, в которое отправляются напоминания администраторам.
 ADMIN_REMINDER_NIGHT_START_HOUR_MSK = int(os.getenv("ADMIN_REMINDER_NIGHT_START_HOUR_MSK", 0))

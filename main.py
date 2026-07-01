@@ -14,7 +14,6 @@ from aiogram.types import BotCommand, BotCommandScopeChat
 
 from config import (
     ADMIN_CHAT_ID,
-    ADMIN_REMINDER_BURST_SECONDS,
     ADMIN_REMINDER_INTERVAL_SECONDS,
     ADMIN_REMINDER_NIGHT_END_HOUR_MSK,
     ADMIN_REMINDER_NIGHT_START_HOUR_MSK,
@@ -121,10 +120,9 @@ async def auto_close_orders_loop(bot: Bot):
 async def admin_orders_reminder_loop(bot: Bot):
     """Шлёт напоминания о необработанных заявках прямо в тему каждой заявки.
 
-    Так тап по уведомлению Telegram открывает нужную тему напрямую. Частота — по
-    каждой заявке отдельно: пока заявка «свежая» (моложе ADMIN_REMINDER_BURST_SECONDS),
-    напоминания идут часто (раз в тик цикла), затем — не чаще одного раза в
-    ADMIN_REMINDER_INTERVAL_SECONDS (по умолчанию 2 минуты).
+    Так тап по уведомлению Telegram открывает нужную тему напрямую. По каждой заявке
+    напоминание отправляется не чаще одного раза в ADMIN_REMINDER_INTERVAL_SECONDS
+    (по умолчанию 1.5 минуты), без начальной «пачки».
     """
     last_sent: dict[int, datetime] = {}
     while True:
@@ -142,10 +140,8 @@ async def admin_orders_reminder_loop(bot: Bot):
                     continue
 
                 age = (now - order["created_at"]).total_seconds()
-                in_burst = age < ADMIN_REMINDER_BURST_SECONDS
                 prev = last_sent.get(order_id)
-                throttled = prev is not None and (now - prev).total_seconds() < ADMIN_REMINDER_INTERVAL_SECONDS
-                if not (in_burst or not throttled):
+                if prev is not None and (now - prev).total_seconds() < ADMIN_REMINDER_INTERVAL_SECONDS:
                     continue
 
                 order_number = order_id + ORDER_NUMBER_OFFSET
